@@ -1,3 +1,746 @@
+
+Conversa com o Gemini
+como eu faço para criar uma nova github page no meu github
+
+Para criar uma página no GitHub Pages, o processo é bem direto. Você pode criar uma página principal para o seu perfil (que fica no endereço seunomedeusuario.github.io) ou uma página específica para um projeto.
+
+Aqui está o passo a passo para criar a sua página de usuário/perfil:
+
+Passo 1: Criar um Novo Repositório
+Acesse sua conta no GitHub.
+
+No canto superior direito, clique no ícone de + e selecione New repository.
+
+Em Repository name, digite exatamente o seguinte: seunomedeusuario.github.io (substituindo seunomedeusuario pelo seu nome de usuário exato no GitHub).
+
+Deixe o repositório como Public (o GitHub Pages gratuito exige que o repositório seja público).
+
+Marque a opção Add a README file.
+
+Clique no botão verde Create repository.
+
+Passo 2: Adicionar Conteúdo
+No seu novo repositório, clique em Add file e depois em Create new file.
+
+Nomeie o arquivo como index.html.
+
+Escreva um código HTML simples para testar, por exemplo: <h1>Bem-vindo à minha página!</h1>.
+
+Vá até o final da página, adicione uma mensagem de commit (se quiser) e clique em Commit changes....
+
+Passo 3: Configurar e Ativar o GitHub Pages
+Dentro do seu repositório, clique na aba Settings (ícone de engrenagem) no menu superior.
+
+No menu lateral esquerdo, procure pela seção "Code and automation" e clique em Pages.
+
+Em Build and deployment, verifique se a opção Source está definida como Deploy from a branch.
+
+Logo abaixo, na seção Branch, selecione main (ou master) no menu suspenso e escolha a pasta / (root).
+
+Clique em Save.
+
+Passo 4: Acessar sua Página
+Pode levar alguns minutos para o GitHub processar e publicar a página (você pode acompanhar o progresso na aba "Actions" do repositório). Quando estiver pronto, basta abrir o seu navegador e acessar o endereço: [https://seunomedeusuario.github.io](https://seunomedeusuario.github.io).
+
+Dica para páginas de Projetos:
+Se você já tem um repositório pronto e quer apenas criar uma documentação ou site para ele, não precisa criar um repositório novo. Basta ir na aba Settings > Pages desse repositório existente, ativar o deploy pela branch main e o seu site ficará disponível em [https://seunomedeusuario.github.io/nome-do-repositorio](https://seunomedeusuario.github.io/nome-do-repositorio).
+
+ok. agora eu tenho um html pronto e a base que sera carregada neste html, como incluir nessa pagina?
+
+Como você já tem o seu arquivo HTML e a base (arquivos de dados, imagens, CSS ou JavaScript) prontos, o próximo passo é enviá-los para o repositório que você acabou de criar.
+
+Antes de começar, certifique-se de que o seu arquivo HTML principal tenha o nome exato de index.html. É ele que o GitHub Pages vai procurar para abrir a página inicial.
+
+Você pode incluir esses arquivos de duas maneiras:
+
+Opção 1: Pelo próprio site do GitHub (Mais simples)
+Se os seus arquivos não forem muito pesados, fazer isso direto pelo navegador é a forma mais rápida:
+
+Acesse a página do seu repositório no GitHub ([github.com/seunomedeusuario/seunomedeusuario.github.io](https://github.com/seunomedeusuario/seunomedeusuario.github.io)).
+
+Clique no botão Add file e selecione Upload files.
+
+Arraste o seu arquivo index.html e a sua "base" (seja uma pasta com dados, scripts ou estilos) para a área indicada na tela.
+
+Role a página para baixo até a seção Commit changes.
+
+Escreva uma mensagem curta (ex: "Adicionando site pronto e base de dados") e clique no botão verde Commit changes.
+
+Opção 2: Usando o Git e o Terminal (Ideal para muitos arquivos)
+Se a sua base for composta por várias pastas ou arquivos mais pesados, usar a linha de comando é mais eficiente:
+
+Abra o seu terminal (CMD, PowerShell ou Git Bash) no seu computador.
+
+Clone o repositório para o seu computador usando o comando:
+
+Bash
+git clone https://github.com/seunomedeusuario/seunomedeusuario.github.io.git
+Mova o seu arquivo index.html e os arquivos da sua base para dentro da nova pasta que foi criada no seu computador.
+
+No terminal, entre na pasta do repositório:
+
+Bash
+cd seunomedeusuario.github.io
+Adicione os arquivos, faça o commit e envie para o GitHub rodando os seguintes comandos em sequência:
+
+Bash
+git add .
+git commit -m "Upload do site e da base"
+git push origin main
+⚠️ Pontos de Atenção sobre a sua "Base"
+Como o GitHub Pages é um serviço de hospedagem estática, há algumas regras sobre como ele lê a sua base:
+
+Caminhos Relativos: Certifique-se de que o seu index.html está chamando a sua base usando caminhos relativos. Por exemplo, se a sua base for um arquivo dados.json na mesma pasta do HTML, use <script src="./dados.json"></script> ou faça a requisição no JavaScript apontando para ./dados.json.
+
+Sem Backend (Bancos de Dados reais): O GitHub Pages não roda códigos de servidor (como PHP, Python, R ou Node.js) nem bancos de dados dinâmicos (como MySQL ou PostgreSQL). Se a sua "base" for um arquivo estático (como um .csv, .json, .js ou arquivos de imagem), ela carregará perfeitamente usando JavaScript no navegador.
+
+Atualização: Após fazer o upload dos arquivos, pode levar alguns minutos (geralmente de 1 a 3 minutos) para a página no link [https://seunomedeusuario.github.io](https://seunomedeusuario.github.io) ser atualizada com o novo conteúdo. Faça um refresh forçado no navegador (Ctrl + F5 ou Cmd + Shift + R) para limpar o cache se não aparecer de imediato.
+
+beleza, inclui no github. como eu abro agora?
+
+Maravilha! Agora que os arquivos estão lá, o seu site já deve estar no ar (ou estará em alguns minutinhos).
+
+Você pode acessar a sua página de duas formas:
+
+1. Pelo link direto
+O endereço do seu site depende de como você nomeou o repositório lá no começo:
+
+Se o repositório chama seunomedeusuario.github.io: O link direto é [https://seunomedeusuario.github.io](https://seunomedeusuario.github.io)
+
+Se o repositório tem outro nome (ex: meu-projeto): O link direto é [https://seunomedeusuario.github.io/nome-do-repositorio](https://seunomedeusuario.github.io/nome-do-repositorio)
+
+(Lembre-se de substituir "seunomedeusuario" pelo seu usuário real do GitHub e respeitar letras maiúsculas e minúsculas).
+
+2. Pegando o link exato nas Configurações
+Se quiser garantir qual é o link exato que o GitHub gerou para você, basta olhar dentro do próprio repositório:
+
+Acesse o seu repositório no GitHub.
+
+Clique na aba Settings (ícone de engrenagem).
+
+No menu lateral esquerdo, clique em Pages.
+
+Lá no topo da tela, você verá uma mensagem com um ícone verde dizendo algo como: "Your site is live at", seguida do link clicável da sua página. É só clicar nele!
+
+⚠️ Dicas Rápidas:
+Aba Actions: Se a página ainda não estiver abrindo (dando Erro 404), clique na aba Actions no topo do seu repositório. Lá você consegue ver uma "bolinha" girando que indica que o GitHub ainda está processando (fazendo o build) dos seus arquivos. Assim que ficar verde, o site estará no ar.
+
+Limpe o Cache: Se você abrir o link e a página parecer desatualizada ou em branco, aperte Ctrl + F5 no seu teclado. Isso força o navegador a baixar os arquivos novos que você acabou de subir, ignorando o cache.
+
+o site so ta exibindo o html teste, nao ta exibindo o que eu upei
+
+Isso é muito comum de acontecer! Geralmente, ocorre por um destes quatro motivos. Vamos conferir um por um para resolver:
+
+1. O nome do arquivo não é exatamente index.html
+O GitHub Pages sempre procura por um arquivo chamado exatamente index.html (tudo em minúsculo) para ser a página inicial.
+
+Se você subiu o seu arquivo com outro nome (por exemplo, meusite.html, Projeto.html ou Index.html com "i" maiúsculo), o GitHub vai ignorá-lo e continuará exibindo aquele index.html de teste que criamos no primeiro passo.
+
+Como resolver: Vá no seu repositório, abra o index.html de teste, clique no ícone de lixeira para apagá-lo (e faça o commit). Depois, encontre o seu arquivo HTML real, clique no ícone de lápis para editá-lo e renomeie-o para index.html.
+
+2. O seu arquivo ficou dentro de uma pasta
+Se você arrastou uma pasta inteira para o GitHub e o seu index.html ficou dentro dela (ex: seunomedeusuario.github.io/site/index.html), o GitHub não vai encontrá-lo automaticamente.
+
+Como resolver: O seu arquivo index.html precisa estar na raiz (na página principal) do repositório, junto com os outros arquivos da sua "base".
+
+3. O GitHub ainda está atualizando (Aba Actions)
+Toda vez que você faz uma alteração, o GitHub cria um "processo" para atualizar o site, o que pode levar de 1 a 3 minutos.
+
+Como resolver: No topo do seu repositório, clique na aba Actions. Verifique se há algum processo rodando (com uma bolinha amarela girando). Se sim, espere ele terminar e ficar com um check verde (✅). Só então o site atualiza.
+
+4. Cache do seu navegador (O mais comum)
+Se você já conferiu que o arquivo se chama index.html minúsculo, que sobrescreveu o teste antigo e a bolinha do Actions já está verde, o problema é o seu navegador que "gravou" a página antiga.
+
+Como resolver: Abra a sua página e aperte Ctrl + F5 (ou Cmd + Shift + R no Mac) para forçar o navegador a baixar a versão nova.
+
+Resumo da checagem: Vá no seu repositório e veja os arquivos. O HTML antigo de teste sumiu? O HTML novo chama index.html? Se sim, é só esperar o "Actions" terminar e dar um Ctrl + F5!
+
+entao eu devo subtituir o index teste pelo codigo html que eu upei?
+
+Exatamente! É exatamente isso que você deve fazer.
+
+Como o GitHub Pages é programado para ler apenas o arquivo chamado index.html como página inicial, aquele arquivo de teste está "bloqueando" o seu site real de aparecer.
+
+Você tem duas formas bem simples de resolver isso direto lá no site do GitHub:
+
+Opção A: Colar o código novo no arquivo de teste
+Se você tem o código do seu HTML fácil aí no seu computador (no Bloco de Notas ou VS Code, por exemplo):
+
+Abra o seu repositório no GitHub.
+
+Clique no index.html (o de teste).
+
+Clique no ícone de lápis (Edit this file) no canto superior direito da caixa de código.
+
+Apague o texto de teste e cole todo o seu código HTML real no lugar.
+
+Clique em Commit changes... no canto superior direito.
+
+Opção B: Apagar o teste e renomear o arquivo que você upou
+Se você já upou o seu arquivo de código, mas ele está com outro nome (por exemplo, projeto.html):
+
+No seu repositório, clique no index.html de teste.
+
+Clique no ícone de lixeira (Delete this file) e depois confirme no botão Commit changes.
+
+Volte para a página inicial do repositório e clique no arquivo HTML real que você upou.
+
+Clique no ícone de lápis para editar.
+
+Lá no topo, onde aparece o nome do arquivo, mude para index.html.
+
+Clique em Commit changes....
+
+Depois de fazer uma dessas opções, o GitHub vai processar a alteração. Aguarde cerca de 1 ou 2 minutos, volte para a sua página (seunomedeusuario.github.io) e aperte Ctrl + F5. O seu site real vai aparecer!
+
+como substituir ou apagar o arquivo no repositorio?
+
+Para apagar ou substituir um arquivo diretamente pelo site do GitHub, o processo é bem simples. Veja o passo a passo para cada caso:
+
+Como APAGAR um arquivo no GitHub
+Acesse a página inicial do seu repositório.
+
+Na lista de arquivos, clique no nome do arquivo que você quer excluir (por exemplo, o index.html de teste).
+
+No canto superior direito da caixa onde o código ou conteúdo do arquivo é exibido, você verá alguns ícones. Clique no ícone de Lixeira (Delete this file).
+
+Uma janela ou aviso aparecerá. Clique no botão verde Commit changes... para confirmar a exclusão.
+
+Como SUBSTITUIR o conteúdo de um arquivo (Editando)
+Se você quiser manter o arquivo, mas trocar o que está escrito dentro dele (como colar o seu código novo no index.html):
+
+Acesse o seu repositório e clique no arquivo que deseja alterar.
+
+No canto superior direito, clique no ícone de Lápis (Edit this file).
+
+O arquivo vai se transformar em uma caixa de texto editável. Você pode selecionar tudo, apagar e colar o seu código novo.
+
+Após colar o código correto, clique no botão verde Commit changes... (no canto superior direito).
+
+Como SUBSTITUIR fazendo upload de um novo arquivo
+Se você preferir não copiar e colar código, mas sim enviar o arquivo pronto do seu computador por cima do antigo:
+
+Vá para a página inicial do seu repositório.
+
+Clique no botão Add file e escolha Upload files.
+
+Arraste do seu computador o seu arquivo index.html correto para a área indicada na tela.
+
+O GitHub vai perceber que já existe um arquivo com esse nome e irá substituí-lo automaticamente.
+
+Role a tela para baixo e clique no botão verde Commit changes.
+
+Após fazer qualquer uma dessas ações, lembre-se de aguardar cerca de 1 a 2 minutos para o GitHub processar a mudança e, ao abrir a sua página, aperte Ctrl + F5 para atualizar o cache!
+
+<!DOCTYPE html>
+
+<html lang="pt-BR">
+
+<head>
+
+<meta charset="utf-8" />
+
+<title>Firmas por hexágono H3</title>
+
+<meta name="viewport" content="initial-scale=1,maximum-scale=1,user-scalable=no" />
+
+
+
+<link href="https://unpkg.com/maplibre-gl@4/dist/maplibre-gl.css" rel="stylesheet" />
+
+<script src="https://unpkg.com/maplibre-gl@4/dist/maplibre-gl.js"></script>
+
+<script src="https://unpkg.com/pmtiles@3/dist/pmtiles.js"></script>
+
+
+
+<style>
+
+  html, body { margin: 0; padding: 0; height: 100%; font-family: system-ui, sans-serif; }
+
+  #map { position: absolute; top: 0; bottom: 0; width: 100%; }
+
+
+
+  #controls {
+
+    position: absolute;
+
+    top: 12px;
+
+    left: 12px;
+
+    z-index: 1;
+
+    background: white;
+
+    padding: 10px 14px;
+
+    border-radius: 6px;
+
+    box-shadow: 0 1px 4px rgba(0,0,0,0.3);
+
+    font-size: 14px;
+
+  }
+
+  #controls label { display: block; margin-bottom: 4px; margin-top: 8px; font-weight: 600; }
+
+  #controls label:first-child { margin-top: 0; }
+
+  #controls select { font-size: 14px; padding: 4px; width: 100%; }
+
+
+
+  #legend {
+
+    position: absolute;
+
+    bottom: 24px;
+
+    left: 12px;
+
+    z-index: 1;
+
+    background: white;
+
+    padding: 10px 14px;
+
+    border-radius: 6px;
+
+    box-shadow: 0 1px 4px rgba(0,0,0,0.3);
+
+    font-size: 13px;
+
+  }
+
+  #legend .title { font-weight: 600; margin-bottom: 6px; }
+
+  #legend .ramp {
+
+    width: 200px;
+
+    height: 12px;
+
+    background: linear-gradient(to right, #440154, #3b528b, #21908d, #5dc863, #fde725);
+
+    border-radius: 2px;
+
+  }
+
+  #legend .labels {
+
+    display: flex;
+
+    justify-content: space-between;
+
+    margin-top: 4px;
+
+    font-size: 11px;
+
+    color: #444;
+
+  }
+
+
+
+  .maplibregl-popup-content {
+
+    font-size: 13px;
+
+  }
+
+</style>
+
+</head>
+
+<body>
+
+
+
+<div id="map"></div>
+
+
+
+<div id="controls">
+
+  <label for="ano-select">Ano</label>
+
+  <select id="ano-select"></select>
+
+
+
+  <label for="variavel-select">Variável</label>
+
+  <select id="variavel-select"></select>
+
+</div>
+
+
+
+<div id="legend">
+
+  <div class="title" id="legend-title"></div>
+
+  <div class="ramp" id="legend-ramp"></div>
+
+  <div class="labels" id="legend-labels"></div>
+
+</div>
+
+
+
+<script>
+
+// ------------------------------------------------------------------
+
+// CONFIGURAÇÃO — ajuste estes valores conforme seus dados
+
+// ------------------------------------------------------------------
+
+const PMS_URL = "hex_rj.pmtiles";   // caminho relativo ao próprio HTML
+
+const ANOS = [2022, 2023];           // anos disponíveis no filtro
+
+const ANO_INICIAL = 2023;
+
+
+
+const RESOLUCOES = [
+
+  { res: 4, minzoom: 0,  maxzoom: 6  },
+
+  { res: 6, minzoom: 6,  maxzoom: 9  },
+
+  { res: 8, minzoom: 9,  maxzoom: 14 }
+
+];
+
+
+
+// paleta viridis (5 cores) reutilizada para todas as variáveis
+
+const CORES = ["#440154", "#3b528b", "#21908d", "#5dc863", "#fde725"];
+
+
+
+// uma variável por coluna disponível — breaks calculados via
+
+// quantile(hex_res6$F001, c(0,.25,.5,.75,1)) / quantile(hex_res6$T001, ...) no R
+
+const VARIAVEIS = {
+
+  F001: { label: "Quantidade de firmas (F001)", values: [0, 11, 44, 220, 17001] },
+
+  T001: { label: "Quantidade de trabalhadores (T001)", values: [0, 60, 380, 3256, 755655] }
+
+};
+
+const VARIAVEL_INICIAL = "F001";
+
+
+
+// distribuição muito assimétrica (cauda longa) — interpolação em escala
+
+// log10(x + 1) evita que os outliers dominem a paleta inteira
+
+function buildFillColorExpr(coluna) {
+
+  const values = VARIAVEIS[coluna].values;
+
+  const expr = ["interpolate", ["linear"], ["log10", ["+", ["to-number", ["get", coluna]], 1]]];
+
+  values.forEach((v, i) => { expr.push(Math.log10(v + 1), CORES[i]); });
+
+  return expr;
+
+}
+
+
+
+function layerId(res) {
+
+  return `fill-h3-r${String(res).padStart(2, "0")}`;
+
+}
+
+// ------------------------------------------------------------------
+
+
+
+let protocol = new pmtiles.Protocol();
+
+maplibregl.addProtocol("pmtiles", protocol.tile);
+
+
+
+const map = new maplibregl.Map({
+
+  container: "map",
+
+  style: {
+
+    version: 8,
+
+    sources: {
+
+      basemap: {
+
+        type: "raster",
+
+        tiles: ["https://tile.openstreetmap.org/{z}/{x}/{y}.png"],
+
+        tileSize: 256,
+
+        attribution: "&copy; OpenStreetMap contributors"
+
+      }
+
+    },
+
+    layers: [{ id: "basemap", type: "raster", source: "basemap" }]
+
+  },
+
+  center: [-51, -15],   // ajuste para o centro dos seus dados
+
+  zoom: 4
+
+});
+
+
+
+map.addControl(new maplibregl.NavigationControl(), "top-right");
+
+
+
+map.on("load", () => {
+
+  map.addSource("hex", {
+
+    type: "vector",
+
+    url: "pmtiles://" + PMTILES_URL
+
+  });
+
+
+
+  RESOLUCOES.forEach(info => {
+
+    const id = layerId(info.res);
+
+    map.addLayer({
+
+      id: id,
+
+      type: "fill",
+
+      source: "hex",
+
+      "source-layer": `h3_r${String(info.res).padStart(2, "0")}`,
+
+      minzoom: info.minzoom,
+
+      maxzoom: info.maxzoom,
+
+      filter: ["==", ["to-number", ["get", "year"]], ANO_INICIAL],
+
+      paint: {
+
+        "fill-color": buildFillColorExpr(VARIAVEL_INICIAL),
+
+        "fill-opacity": 0.85,
+
+        "fill-outline-color": "rgba(255,255,255,0.3)"
+
+      }
+
+    });
+
+
+
+    // popup ao clicar
+
+    map.on("click", id, (e) => {
+
+      const props = e.features[0].properties;
+
+      new maplibregl.Popup()
+
+        .setLngLat(e.lngLat)
+
+        .setHTML(
+
+          `F001: ${props.F001}<br>T001: ${props.T001}<br>Ano: ${props.year}`
+
+        )
+
+        .addTo(map);
+
+    });
+
+
+
+    map.on("mouseenter", id, () => { map.getCanvas().style.cursor = "pointer"; });
+
+    map.on("mouseleave", id, () => { map.getCanvas().style.cursor = ""; });
+
+  });
+
+
+
+  atualizarLegenda(VARIAVEL_INICIAL);
+
+});
+
+
+
+// ------------------------------------------------------------------
+
+// Legenda dinâmica — reflete a variável ativa
+
+// ------------------------------------------------------------------
+
+function formatarNumero(v) {
+
+  if (v >= 1000) return (v / 1000).toFixed(v >= 10000 ? 0 : 1) + "k";
+
+  return String(v);
+
+}
+
+
+
+function atualizarLegenda(coluna) {
+
+  const info = VARIAVEIS[coluna];
+
+  document.getElementById("legend-title").textContent = info.label;
+
+  document.getElementById("legend-ramp").style.background =
+
+    `linear-gradient(to right, ${CORES.join(", ")})`;
+
+  document.getElementById("legend-labels").innerHTML =
+
+    info.values.map(v => `<span>${formatarNumero(v)}</span>`).join("");
+
+}
+
+
+
+// ------------------------------------------------------------------
+
+// Seletor de ano
+
+// ------------------------------------------------------------------
+
+const selectAno = document.getElementById("ano-select");
+
+ANOS.forEach(ano => {
+
+  const opt = document.createElement("option");
+
+  opt.value = ano;
+
+  opt.textContent = ano;
+
+  if (ano === ANO_INICIAL) opt.selected = true;
+
+  selectAno.appendChild(opt);
+
+});
+
+
+
+selectAno.addEventListener("change", () => {
+
+  const anoSelecionado = parseInt(selectAno.value, 10);
+
+  RESOLUCOES.forEach(info => {
+
+    map.setFilter(
+
+      layerId(info.res),
+
+      ["==", ["to-number", ["get", "year"]], anoSelecionado]
+
+    );
+
+  });
+
+});
+
+
+
+// ------------------------------------------------------------------
+
+// Seletor de variável (F001 / T001)
+
+// ------------------------------------------------------------------
+
+const selectVariavel = document.getElementById("variavel-select");
+
+Object.keys(VARIAVEIS).forEach(coluna => {
+
+  const opt = document.createElement("option");
+
+  opt.value = coluna;
+
+  opt.textContent = VARIAVEIS[coluna].label;
+
+  if (coluna === VARIAVEL_INICIAL) opt.selected = true;
+
+  selectVariavel.appendChild(opt);
+
+});
+
+
+
+selectVariavel.addEventListener("change", () => {
+
+  const coluna = selectVariavel.value;
+
+  const expr = buildFillColorExpr(coluna);
+
+  RESOLUCOES.forEach(info => {
+
+    map.setPaintProperty(layerId(info.res), "fill-color", expr);
+
+  });
+
+  atualizarLegenda(coluna);
+
+});
+
+</script>
+
+
+
+</body>
+
+</html>
+
+
+
+pq este codigo nao esta carregando o arquivo? corrija-o para puxar o arquivo hex_rj.pmtiles localizado na arvore do github
+
+O problema no seu código é um pequeno erro de digitação no nome da variável que guarda o endereço do arquivo.
+
+Na seção de configuração, você definiu a constante como PMS_URL:
+
+JavaScript
+const PMS_URL = "hex_rj.pmtiles";
+Mas, mais para baixo, na hora de adicionar a fonte no mapa, você tentou puxar uma variável chamada PMTILES_URL (que não existe, o que quebra o JavaScript e faz o arquivo não carregar):
+
+JavaScript
+url: "pmtiles://" + PMTILES_URL
+Além disso, como o arquivo está no GitHub Pages na mesma pasta do seu index.html, usar "hex_rj.pmtiles" (o caminho relativo) está corretíssimo. Apenas lembre-se de que o GitHub diferencia letras maiúsculas de minúsculas, então o nome do arquivo upado deve ser exatamente hex_rj.pmtiles.
+
+Aqui está o código completo corrigido. Você pode copiar tudo e colar por cima do seu index.html lá no GitHub:
+
+HTML
 <!DOCTYPE html>
 <html lang="pt-BR">
 <head>
@@ -79,10 +822,11 @@
 
 <script>
 // ------------------------------------------------------------------
-// CONFIGURAÇÃO — ajuste estes valores conforme seus dados
+// CONFIGURAÇÃO
 // ------------------------------------------------------------------
-const PMS_URL = "hex_rj.pmtiles";   // caminho relativo ao próprio HTML
-const ANOS = [2022, 2023];           // anos disponíveis no filtro
+// CORREÇÃO: Variável renomeada para PMTILES_URL para bater com o resto do código
+const PMTILES_URL = "hex_rj.pmtiles";   
+const ANOS = [2022, 2023];             
 const ANO_INICIAL = 2023;
 
 const RESOLUCOES = [
@@ -91,19 +835,14 @@ const RESOLUCOES = [
   { res: 8, minzoom: 9,  maxzoom: 14 }
 ];
 
-// paleta viridis (5 cores) reutilizada para todas as variáveis
 const CORES = ["#440154", "#3b528b", "#21908d", "#5dc863", "#fde725"];
 
-// uma variável por coluna disponível — breaks calculados via
-// quantile(hex_res6$F001, c(0,.25,.5,.75,1)) / quantile(hex_res6$T001, ...) no R
 const VARIAVEIS = {
   F001: { label: "Quantidade de firmas (F001)", values: [0, 11, 44, 220, 17001] },
   T001: { label: "Quantidade de trabalhadores (T001)", values: [0, 60, 380, 3256, 755655] }
 };
 const VARIAVEL_INICIAL = "F001";
 
-// distribuição muito assimétrica (cauda longa) — interpolação em escala
-// log10(x + 1) evita que os outliers dominem a paleta inteira
 function buildFillColorExpr(coluna) {
   const values = VARIAVEIS[coluna].values;
   const expr = ["interpolate", ["linear"], ["log10", ["+", ["to-number", ["get", coluna]], 1]]];
@@ -133,8 +872,8 @@ const map = new maplibregl.Map({
     },
     layers: [{ id: "basemap", type: "raster", source: "basemap" }]
   },
-  center: [-51, -15],   // ajuste para o centro dos seus dados
-  zoom: 4
+  center: [-43.2, -22.9],   // Centralizei no RJ, já que os dados parecem ser de lá (hex_rj)
+  zoom: 6
 });
 
 map.addControl(new maplibregl.NavigationControl(), "top-right");
@@ -142,7 +881,7 @@ map.addControl(new maplibregl.NavigationControl(), "top-right");
 map.on("load", () => {
   map.addSource("hex", {
     type: "vector",
-    url: "pmtiles://" + PMTILES_URL
+    url: "pmtiles://" + PMTILES_URL // Agora a variável existe e vai puxar corretamente!
   });
 
   RESOLUCOES.forEach(info => {
@@ -181,7 +920,7 @@ map.on("load", () => {
 });
 
 // ------------------------------------------------------------------
-// Legenda dinâmica — reflete a variável ativa
+// Legenda dinâmica
 // ------------------------------------------------------------------
 function formatarNumero(v) {
   if (v >= 1000) return (v / 1000).toFixed(v >= 10000 ? 0 : 1) + "k";
@@ -243,3 +982,12 @@ selectVariavel.addEventListener("change", () => {
 
 </body>
 </html>
+(Nota: Aproveitei para mudar as coordenadas centrais do mapa de [-51, -15] para [-43.2, -22.9], que é o centro do Rio de Janeiro, já que o seu arquivo se chama hex_rj. Assim o mapa já vai abrir focado no estado certo!).
+
+Depois de salvar a alteração no GitHub, aguarde uns 2 minutinhos e não esqueça de dar o Ctrl + F5 na página!
+
+
+
+
+O Gemini é uma IA e pode cometer erros.
+
