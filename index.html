@@ -53,6 +53,7 @@
     font-size: 11px;
     color: #444;
   }
+
   .maplibregl-popup-content { font-size: 13px; }
 </style>
 </head>
@@ -78,9 +79,10 @@
 // ------------------------------------------------------------------
 // CONFIGURAÇÃO
 // ------------------------------------------------------------------
-const PMTILES_URL = "https://github.com/pedrossantos777/pedrossantos777.github.io/releases/download/v1/hex_br.pmtiles";   
+// 1. Usando proxy de CORS para contornar o bloqueio do GitHub Releases
+const PMTILES_URL = "https://corsproxy.io/?https://github.com/pedrossantos777/pedrossantos777.github.io/releases/download/v1/hex_br.pmtiles";   
 
-// NOME DA CAMADA INTERNA (Geralmente é o nome do arquivo original sem extensão)
+// 2. Apontando para a camada unificada do arquivo nacional
 const SOURCE_LAYER_NAME = "hex_br"; 
 
 const ANOS = [2022, 2023];             
@@ -94,6 +96,7 @@ const RESOLUCOES = [
 
 const CORES = ["#440154", "#3b528b", "#21908d", "#5dc863", "#fde725"];
 
+// 3. Colunas atualizadas (n_firmas e qt_vinc_ativos)
 const VARIAVEIS = {
   n_firmas: { label: "Quantidade de firmas", values: [0, 11, 44, 220, 17001] },
   qt_vinc_ativos: { label: "Quantidade de trabalhadores", values: [0, 60, 380, 3256, 755655] }
@@ -111,18 +114,7 @@ function layerId(res) {
   return `fill-h3-r${String(res).padStart(2, "0")}`;
 }
 
-// ==================================================================
-// ESPIÃO DE METADADOS (Para debug caso não carregue)
-// ==================================================================
-const p = new pmtiles.PMTiles(PMTILES_URL);
-p.getMetadata().then(m => {
-  if(m && m.vector_layers) {
-    console.log("✅ PMTiles carregado com sucesso!");
-    console.log("Nomes das camadas internas disponíveis:", m.vector_layers.map(v => v.id));
-  }
-}).catch(err => console.error("❌ Erro ao ler o PMTiles da URL:", err));
-// ==================================================================
-
+// ------------------------------------------------------------------
 let protocol = new pmtiles.Protocol();
 maplibregl.addProtocol("pmtiles", protocol.tile);
 
@@ -158,10 +150,10 @@ map.on("load", () => {
       id: id,
       type: "fill",
       source: "hex",
-      "source-layer": SOURCE_LAYER_NAME, // Alterado para buscar a camada unificada
+      "source-layer": SOURCE_LAYER_NAME,
       minzoom: info.minzoom,
       maxzoom: info.maxzoom,
-      // Filtro duplo: Verifica o ANO e também a RESOLUÇÃO (h3_res)
+      // Filtro duplo cruzando o 'ano' selecionado e a resolução 'h3_res'
       filter: [
         "all",
         ["==", ["to-number", ["get", "ano"]], ANO_INICIAL],
@@ -195,7 +187,7 @@ map.on("load", () => {
 });
 
 // ------------------------------------------------------------------
-// Legenda dinâmica
+// Legenda
 // ------------------------------------------------------------------
 function formatarNumero(v) {
   if (v >= 1000) return (v / 1000).toFixed(v >= 10000 ? 0 : 1) + "k";
@@ -210,7 +202,7 @@ function atualizarLegenda(coluna) {
 }
 
 // ------------------------------------------------------------------
-// Controles
+// Controles de Seleção
 // ------------------------------------------------------------------
 const selectAno = document.getElementById("ano-select");
 ANOS.forEach(ano => {
