@@ -53,10 +53,7 @@
     font-size: 11px;
     color: #444;
   }
-
-  .maplibregl-popup-content {
-    font-size: 13px;
-  }
+  .maplibregl-popup-content { font-size: 13px; }
 </style>
 </head>
 <body>
@@ -83,6 +80,9 @@
 // ------------------------------------------------------------------
 const PMTILES_URL = "https://github.com/pedrossantos777/pedrossantos777.github.io/releases/download/v1/hex_br.pmtiles";   
 
+// NOME DA CAMADA INTERNA (Geralmente é o nome do arquivo original sem extensão)
+const SOURCE_LAYER_NAME = "hex_br"; 
+
 const ANOS = [2022, 2023];             
 const ANO_INICIAL = 2023;
 
@@ -94,7 +94,6 @@ const RESOLUCOES = [
 
 const CORES = ["#440154", "#3b528b", "#21908d", "#5dc863", "#fde725"];
 
-// Colunas atualizadas conforme a sua base
 const VARIAVEIS = {
   n_firmas: { label: "Quantidade de firmas", values: [0, 11, 44, 220, 17001] },
   qt_vinc_ativos: { label: "Quantidade de trabalhadores", values: [0, 60, 380, 3256, 755655] }
@@ -111,7 +110,18 @@ function buildFillColorExpr(coluna) {
 function layerId(res) {
   return `fill-h3-r${String(res).padStart(2, "0")}`;
 }
-// ------------------------------------------------------------------
+
+// ==================================================================
+// ESPIÃO DE METADADOS (Para debug caso não carregue)
+// ==================================================================
+const p = new pmtiles.PMTiles(PMTILES_URL);
+p.getMetadata().then(m => {
+  if(m && m.vector_layers) {
+    console.log("✅ PMTiles carregado com sucesso!");
+    console.log("Nomes das camadas internas disponíveis:", m.vector_layers.map(v => v.id));
+  }
+}).catch(err => console.error("❌ Erro ao ler o PMTiles da URL:", err));
+// ==================================================================
 
 let protocol = new pmtiles.Protocol();
 maplibregl.addProtocol("pmtiles", protocol.tile);
@@ -130,7 +140,7 @@ const map = new maplibregl.Map({
     },
     layers: [{ id: "basemap", type: "raster", source: "basemap" }]
   },
-  center: [-51, -15], // Centro focado no Brasil
+  center: [-51, -15], 
   zoom: 4
 });
 
@@ -148,11 +158,15 @@ map.on("load", () => {
       id: id,
       type: "fill",
       source: "hex",
-      "source-layer": `h3_r${String(info.res).padStart(2, "0")}`,
+      "source-layer": SOURCE_LAYER_NAME, // Alterado para buscar a camada unificada
       minzoom: info.minzoom,
       maxzoom: info.maxzoom,
-      // Atualizado para puxar a coluna "ano"
-      filter: ["==", ["to-number", ["get", "ano"]], ANO_INICIAL],
+      // Filtro duplo: Verifica o ANO e também a RESOLUÇÃO (h3_res)
+      filter: [
+        "all",
+        ["==", ["to-number", ["get", "ano"]], ANO_INICIAL],
+        ["==", ["to-number", ["get", "h3_res"]], info.res]
+      ],
       paint: {
         "fill-color": buildFillColorExpr(VARIAVEL_INICIAL),
         "fill-opacity": 0.85,
@@ -160,7 +174,6 @@ map.on("load", () => {
       }
     });
 
-    // popup ao clicar atualizado com as novas colunas
     map.on("click", id, (e) => {
       const props = e.features[0].properties;
       new maplibregl.Popup()
@@ -192,14 +205,12 @@ function formatarNumero(v) {
 function atualizarLegenda(coluna) {
   const info = VARIAVEIS[coluna];
   document.getElementById("legend-title").textContent = info.label;
-  document.getElementById("legend-ramp").style.background =
-    `linear-gradient(to right, ${CORES.join(", ")})`;
-  document.getElementById("legend-labels").innerHTML =
-    info.values.map(v => `<span>${formatarNumero(v)}</span>`).join("");
+  document.getElementById("legend-ramp").style.background = `linear-gradient(to right, ${CORES.join(", ")})`;
+  document.getElementById("legend-labels").innerHTML = info.values.map(v => `<span>${formatarNumero(v)}</span>`).join("");
 }
 
 // ------------------------------------------------------------------
-// Seletor de ano
+// Controles
 // ------------------------------------------------------------------
 const selectAno = document.getElementById("ano-select");
 ANOS.forEach(ano => {
@@ -213,17 +224,14 @@ ANOS.forEach(ano => {
 selectAno.addEventListener("change", () => {
   const anoSelecionado = parseInt(selectAno.value, 10);
   RESOLUCOES.forEach(info => {
-    map.setFilter(
-      layerId(info.res),
-      // Atualizado para filtrar pela coluna "ano"
-      ["==", ["to-number", ["get", "ano"]], anoSelecionado]
-    );
+    map.setFilter(layerId(info.res), [
+      "all",
+      ["==", ["to-number", ["get", "ano"]], anoSelecionado],
+      ["==", ["to-number", ["get", "h3_res"]], info.res]
+    ]);
   });
 });
 
-// ------------------------------------------------------------------
-// Seletor de variável (n_firmas / qt_vinc_ativos)
-// ------------------------------------------------------------------
 const selectVariavel = document.getElementById("variavel-select");
 Object.keys(VARIAVEIS).forEach(coluna => {
   const opt = document.createElement("option");
@@ -236,9 +244,7 @@ Object.keys(VARIAVEIS).forEach(coluna => {
 selectVariavel.addEventListener("change", () => {
   const coluna = selectVariavel.value;
   const expr = buildFillColorExpr(coluna);
-  RESOLUCOES.forEach(info => {
-    map.setPaintProperty(layerId(info.res), "fill-color", expr);
-  });
+  RESOLUCOES.forEach(info => { map.setPaintProperty(layerId(info.res), "fill-color", expr); });
   atualizarLegenda(coluna);
 });
 </script>
