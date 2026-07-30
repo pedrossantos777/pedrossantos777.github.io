@@ -2,7 +2,7 @@
 <html lang="pt-BR">
 <head>
 <meta charset="utf-8" />
-<title>Firmas por hexágono H3</title>
+<title>Firmas por hexágono H3 - Brasil</title>
 <meta name="viewport" content="initial-scale=1,maximum-scale=1,user-scalable=no" />
 
 <link href="https://unpkg.com/maplibre-gl@4/dist/maplibre-gl.css" rel="stylesheet" />
@@ -81,8 +81,8 @@
 // ------------------------------------------------------------------
 // CONFIGURAÇÃO
 // ------------------------------------------------------------------
-// CORREÇÃO: Variável renomeada para PMTILES_URL para bater com o resto do código
-const PMTILES_URL = "hex_rj.pmtiles";   
+const PMTILES_URL = "https://github.com/pedrossantos777/pedrossantos777.github.io/releases/download/v1/hex_br.pmtiles";   
+
 const ANOS = [2022, 2023];             
 const ANO_INICIAL = 2023;
 
@@ -94,11 +94,12 @@ const RESOLUCOES = [
 
 const CORES = ["#440154", "#3b528b", "#21908d", "#5dc863", "#fde725"];
 
+// Colunas atualizadas conforme a sua base
 const VARIAVEIS = {
-  F001: { label: "Quantidade de firmas (F001)", values: [0, 11, 44, 220, 17001] },
-  T001: { label: "Quantidade de trabalhadores (T001)", values: [0, 60, 380, 3256, 755655] }
+  n_firmas: { label: "Quantidade de firmas", values: [0, 11, 44, 220, 17001] },
+  qt_vinc_ativos: { label: "Quantidade de trabalhadores", values: [0, 60, 380, 3256, 755655] }
 };
-const VARIAVEL_INICIAL = "F001";
+const VARIAVEL_INICIAL = "n_firmas";
 
 function buildFillColorExpr(coluna) {
   const values = VARIAVEIS[coluna].values;
@@ -129,8 +130,8 @@ const map = new maplibregl.Map({
     },
     layers: [{ id: "basemap", type: "raster", source: "basemap" }]
   },
-  center: [-43.2, -22.9],   // Centralizei no RJ, já que os dados parecem ser de lá (hex_rj)
-  zoom: 6
+  center: [-51, -15], // Centro focado no Brasil
+  zoom: 4
 });
 
 map.addControl(new maplibregl.NavigationControl(), "top-right");
@@ -138,7 +139,7 @@ map.addControl(new maplibregl.NavigationControl(), "top-right");
 map.on("load", () => {
   map.addSource("hex", {
     type: "vector",
-    url: "pmtiles://" + PMTILES_URL // Agora a variável existe e vai puxar corretamente!
+    url: "pmtiles://" + PMTILES_URL 
   });
 
   RESOLUCOES.forEach(info => {
@@ -150,7 +151,8 @@ map.on("load", () => {
       "source-layer": `h3_r${String(info.res).padStart(2, "0")}`,
       minzoom: info.minzoom,
       maxzoom: info.maxzoom,
-      filter: ["==", ["to-number", ["get", "year"]], ANO_INICIAL],
+      // Atualizado para puxar a coluna "ano"
+      filter: ["==", ["to-number", ["get", "ano"]], ANO_INICIAL],
       paint: {
         "fill-color": buildFillColorExpr(VARIAVEL_INICIAL),
         "fill-opacity": 0.85,
@@ -158,13 +160,16 @@ map.on("load", () => {
       }
     });
 
-    // popup ao clicar
+    // popup ao clicar atualizado com as novas colunas
     map.on("click", id, (e) => {
       const props = e.features[0].properties;
       new maplibregl.Popup()
         .setLngLat(e.lngLat)
         .setHTML(
-          `F001: ${props.F001}<br>T001: ${props.T001}<br>Ano: ${props.year}`
+          `<strong>Firmas:</strong> ${props.n_firmas}<br>
+           <strong>Vínculos:</strong> ${props.qt_vinc_ativos}<br>
+           <strong>UF:</strong> ${props.uf}<br>
+           <strong>Ano:</strong> ${props.ano}`
         )
         .addTo(map);
     });
@@ -210,13 +215,14 @@ selectAno.addEventListener("change", () => {
   RESOLUCOES.forEach(info => {
     map.setFilter(
       layerId(info.res),
-      ["==", ["to-number", ["get", "year"]], anoSelecionado]
+      // Atualizado para filtrar pela coluna "ano"
+      ["==", ["to-number", ["get", "ano"]], anoSelecionado]
     );
   });
 });
 
 // ------------------------------------------------------------------
-// Seletor de variável (F001 / T001)
+// Seletor de variável (n_firmas / qt_vinc_ativos)
 // ------------------------------------------------------------------
 const selectVariavel = document.getElementById("variavel-select");
 Object.keys(VARIAVEIS).forEach(coluna => {
