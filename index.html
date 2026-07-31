@@ -2,7 +2,7 @@
 <html lang="pt-BR">
 <head>
 <meta charset="utf-8" />
-<title>Firmas por hexágono H3 - Brasil</title>
+<title>Firmas por hexágono H3</title>
 <meta name="viewport" content="initial-scale=1,maximum-scale=1,user-scalable=no" />
 
 <link href="https://unpkg.com/maplibre-gl@4/dist/maplibre-gl.css" rel="stylesheet" />
@@ -54,7 +54,9 @@
     color: #444;
   }
 
-  .maplibregl-popup-content { font-size: 13px; }
+  .maplibregl-popup-content {
+    font-size: 13px;
+  }
 </style>
 </head>
 <body>
@@ -79,12 +81,8 @@
 // ------------------------------------------------------------------
 // CONFIGURAÇÃO
 // ------------------------------------------------------------------
-// 1. Usando proxy de CORS para contornar o bloqueio do GitHub Releases
-const PMTILES_URL = "https://corsproxy.io/?https://github.com/pedrossantos777/pedrossantos777.github.io/releases/download/v1/hex_br.pmtiles";   
-
-// 2. Apontando para a camada unificada do arquivo nacional
-const SOURCE_LAYER_NAME = "hex_br"; 
-
+// URL ATUALIZADA PARA O CLOUDFLARE R2
+const PMTILES_URL = "https://pub-a1447fee74634ed59f47ce2ba90a1fbd.r2.dev/hex_rj.pmtiles";   
 const ANOS = [2022, 2023];             
 const ANO_INICIAL = 2023;
 
@@ -96,12 +94,11 @@ const RESOLUCOES = [
 
 const CORES = ["#440154", "#3b528b", "#21908d", "#5dc863", "#fde725"];
 
-// 3. Colunas atualizadas (n_firmas e qt_vinc_ativos)
 const VARIAVEIS = {
-  n_firmas: { label: "Quantidade de firmas", values: [0, 11, 44, 220, 17001] },
-  qt_vinc_ativos: { label: "Quantidade de trabalhadores", values: [0, 60, 380, 3256, 755655] }
+  F001: { label: "Quantidade de firmas (F001)", values: [0, 11, 44, 220, 17001] },
+  T001: { label: "Quantidade de trabalhadores (T001)", values: [0, 60, 380, 3256, 755655] }
 };
-const VARIAVEL_INICIAL = "n_firmas";
+const VARIAVEL_INICIAL = "F001";
 
 function buildFillColorExpr(coluna) {
   const values = VARIAVEIS[coluna].values;
@@ -113,8 +110,8 @@ function buildFillColorExpr(coluna) {
 function layerId(res) {
   return `fill-h3-r${String(res).padStart(2, "0")}`;
 }
-
 // ------------------------------------------------------------------
+
 let protocol = new pmtiles.Protocol();
 maplibregl.addProtocol("pmtiles", protocol.tile);
 
@@ -132,8 +129,8 @@ const map = new maplibregl.Map({
     },
     layers: [{ id: "basemap", type: "raster", source: "basemap" }]
   },
-  center: [-51, -15], 
-  zoom: 4
+  center: [-43.2, -22.9],   // Centralizei no RJ, já que os dados parecem ser de lá (hex_rj)
+  zoom: 6
 });
 
 map.addControl(new maplibregl.NavigationControl(), "top-right");
@@ -150,15 +147,10 @@ map.on("load", () => {
       id: id,
       type: "fill",
       source: "hex",
-      "source-layer": SOURCE_LAYER_NAME,
+      "source-layer": `h3_r${String(info.res).padStart(2, "0")}`,
       minzoom: info.minzoom,
       maxzoom: info.maxzoom,
-      // Filtro duplo cruzando o 'ano' selecionado e a resolução 'h3_res'
-      filter: [
-        "all",
-        ["==", ["to-number", ["get", "ano"]], ANO_INICIAL],
-        ["==", ["to-number", ["get", "h3_res"]], info.res]
-      ],
+      filter: ["==", ["to-number", ["get", "year"]], ANO_INICIAL],
       paint: {
         "fill-color": buildFillColorExpr(VARIAVEL_INICIAL),
         "fill-opacity": 0.85,
@@ -166,15 +158,13 @@ map.on("load", () => {
       }
     });
 
+    // popup ao clicar
     map.on("click", id, (e) => {
       const props = e.features[0].properties;
       new maplibregl.Popup()
         .setLngLat(e.lngLat)
         .setHTML(
-          `<strong>Firmas:</strong> ${props.n_firmas}<br>
-           <strong>Vínculos:</strong> ${props.qt_vinc_ativos}<br>
-           <strong>UF:</strong> ${props.uf}<br>
-           <strong>Ano:</strong> ${props.ano}`
+          `F001: ${props.F001}<br>T001: ${props.T001}<br>Ano: ${props.year}`
         )
         .addTo(map);
     });
@@ -187,7 +177,7 @@ map.on("load", () => {
 });
 
 // ------------------------------------------------------------------
-// Legenda
+// Legenda dinâmica
 // ------------------------------------------------------------------
 function formatarNumero(v) {
   if (v >= 1000) return (v / 1000).toFixed(v >= 10000 ? 0 : 1) + "k";
@@ -197,12 +187,14 @@ function formatarNumero(v) {
 function atualizarLegenda(coluna) {
   const info = VARIAVEIS[coluna];
   document.getElementById("legend-title").textContent = info.label;
-  document.getElementById("legend-ramp").style.background = `linear-gradient(to right, ${CORES.join(", ")})`;
-  document.getElementById("legend-labels").innerHTML = info.values.map(v => `<span>${formatarNumero(v)}</span>`).join("");
+  document.getElementById("legend-ramp").style.background =
+    `linear-gradient(to right, ${CORES.join(", ")})`;
+  document.getElementById("legend-labels").innerHTML =
+    info.values.map(v => `<span>${formatarNumero(v)}</span>`).join("");
 }
 
 // ------------------------------------------------------------------
-// Controles de Seleção
+// Seletor de ano
 // ------------------------------------------------------------------
 const selectAno = document.getElementById("ano-select");
 ANOS.forEach(ano => {
@@ -216,14 +208,16 @@ ANOS.forEach(ano => {
 selectAno.addEventListener("change", () => {
   const anoSelecionado = parseInt(selectAno.value, 10);
   RESOLUCOES.forEach(info => {
-    map.setFilter(layerId(info.res), [
-      "all",
-      ["==", ["to-number", ["get", "ano"]], anoSelecionado],
-      ["==", ["to-number", ["get", "h3_res"]], info.res]
-    ]);
+    map.setFilter(
+      layerId(info.res),
+      ["==", ["to-number", ["get", "year"]], anoSelecionado]
+    );
   });
 });
 
+// ------------------------------------------------------------------
+// Seletor de variável (F001 / T001)
+// ------------------------------------------------------------------
 const selectVariavel = document.getElementById("variavel-select");
 Object.keys(VARIAVEIS).forEach(coluna => {
   const opt = document.createElement("option");
@@ -236,7 +230,9 @@ Object.keys(VARIAVEIS).forEach(coluna => {
 selectVariavel.addEventListener("change", () => {
   const coluna = selectVariavel.value;
   const expr = buildFillColorExpr(coluna);
-  RESOLUCOES.forEach(info => { map.setPaintProperty(layerId(info.res), "fill-color", expr); });
+  RESOLUCOES.forEach(info => {
+    map.setPaintProperty(layerId(info.res), "fill-color", expr);
+  });
   atualizarLegenda(coluna);
 });
 </script>
