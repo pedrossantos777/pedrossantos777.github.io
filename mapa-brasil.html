@@ -69,6 +69,12 @@
 
   <label for="variavel-select">Variável</label>
   <select id="variavel-select"></select>
+
+  <label for="paleta-select">Paleta de cores</label>
+  <select id="paleta-select"></select>
+
+  <label for="fundo-select">Fundo do mapa</label>
+  <select id="fundo-select"></select>
 </div>
 
 <div id="legend">
@@ -83,7 +89,8 @@
 // ------------------------------------------------------------------
 // troque pelo domínio público real do bucket R2 onde subiu o hex_br.pmtiles
 // (mantive o mesmo domínio usado antes para hex_rj.pmtiles — confirme se é o mesmo bucket)
-const PMTILES_URL = "https://pub-a1447fee74634ed59f47ce2ba90a1fbd.r2.dev/hex_br.pmtiles";
+const PMTILES_URL = "https://pub-a1447fee74634ed59f47ce2ba90a1fbd.r2.dev/hex.pmtiles_br";
+
 // ajuste o intervalo real de anos disponíveis na base nacional
 const ANOS = Array.from({ length: 2023 - 2013 + 1 }, (_, i) => 2013 + i); // 2013..2023
 const ANO_INICIAL = 2023;
@@ -94,8 +101,64 @@ const RESOLUCOES = [
   { res: 8, minzoom: 10, maxzoom: 14 }
 ];
 
-// paleta viridis (5 cores) reutilizada para todas as variáveis
-const CORES = ["#440154", "#3b528b", "#21908d", "#5dc863", "#fde725"];
+// paletas de cores disponíveis (mesmos códigos usados no build_fill()/interpolate() do R)
+const PALETAS = {
+  viridis: { label: "Viridis", cores: ["#440154", "#3b528b", "#21908d", "#5dc863", "#fde725"] },
+  cividis: { label: "Cividis", cores: ["#00204d", "#414d6b", "#7c7b78", "#bcaf6f", "#ffea46"] },
+  blues:   { label: "Azuis (Blues)", cores: ["#eff3ff", "#bdd7e7", "#6baed6", "#3182bd", "#08519c"] },
+  greens:  { label: "Verdes (Greens)", cores: ["#edf8e9", "#bae4b3", "#74c476", "#31a354", "#006d2c"] }
+};
+const PALETA_INICIAL = "viridis";
+
+// fundos de mapa disponíveis — todos gratuitos, sem chave de API
+const BASEMAPS = {
+  osm: {
+    label: "OpenStreetMap",
+    style: {
+      version: 8,
+      sources: {
+        basemap: {
+          type: "raster",
+          tiles: ["https://tile.openstreetmap.org/{z}/{x}/{y}.png"],
+          tileSize: 256,
+          attribution: "&copy; OpenStreetMap contributors"
+        }
+      },
+      layers: [{ id: "basemap", type: "raster", source: "basemap" }]
+    }
+  },
+  satelite: {
+    label: "Satélite",
+    style: {
+      version: 8,
+      sources: {
+        basemap: {
+          type: "raster",
+          tiles: ["https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}"],
+          tileSize: 256,
+          attribution: "Esri, Maxar, Earthstar Geographics"
+        }
+      },
+      layers: [{ id: "basemap", type: "raster", source: "basemap" }]
+    }
+  },
+  relevo: {
+    label: "Relevo",
+    style: {
+      version: 8,
+      sources: {
+        basemap: {
+          type: "raster",
+          tiles: ["https://tile.opentopomap.org/{z}/{x}/{y}.png"],
+          tileSize: 256,
+          attribution: "&copy; OpenStreetMap contributors, SRTM | Map style: &copy; OpenTopoMap"
+        }
+      },
+      layers: [{ id: "basemap", type: "raster", source: "basemap" }]
+    }
+  }
+};
+const FUNDO_INICIAL = "osm";
 
 // uma variável por coluna disponível — troque os "values" pelos quartis
 // reais: quantile(hex_res6$n_firmas, c(0,.25,.5,.75,1)) /
@@ -109,10 +172,11 @@ const VARIAVEL_INICIAL = "n_firmas";
 // interpolação linear direta. Se a distribuição vier muito assimétrica
 // (poucos hexágonos com valores extremos, como vimos antes em F001/T001),
 // troque para log10(x+1): ["log10", ["+", ["to-number", ["get", coluna]], 1]]
-function buildFillColorExpr(coluna) {
+function buildFillColorExpr(coluna, paleta) {
   const values = VARIAVEIS[coluna].values;
+  const cores = PALETAS[paleta].cores;
   const expr = ["interpolate", ["linear"], ["to-number", ["get", coluna]]];
-  values.forEach((v, i) => { expr.push(v, CORES[i]); });
+  values.forEach((v, i) => { expr.push(v, cores[i]); });
   return expr;
 }
 
@@ -121,30 +185,26 @@ function layerId(res) {
 }
 // ------------------------------------------------------------------
 
+// estado ativo — atualizado pelos seletores
+let anoAtivo = ANO_INICIAL;
+let variavelAtiva = VARIAVEL_INICIAL;
+let paletaAtiva = PALETA_INICIAL;
+
 let protocol = new pmtiles.Protocol();
 maplibregl.addProtocol("pmtiles", protocol.tile);
 
 const map = new maplibregl.Map({
   container: "map",
-  style: {
-    version: 8,
-    sources: {
-      basemap: {
-        type: "raster",
-        tiles: ["https://tile.openstreetmap.org/{z}/{x}/{y}.png"],
-        tileSize: 256,
-        attribution: "&copy; OpenStreetMap contributors"
-      }
-    },
-    layers: [{ id: "basemap", type: "raster", source: "basemap" }]
-  },
+  style: BASEMAPS[FUNDO_INICIAL].style,
   center: [-51, -15],   // Brasil inteiro
   zoom: 4
 });
 
 map.addControl(new maplibregl.NavigationControl(), "top-right");
 
-map.on("load", () => {
+// adiciona source + camadas dos hexágonos — chamada no load inicial e
+// de novo toda vez que o fundo do mapa muda (setStyle() apaga tudo)
+function adicionarCamadasHex() {
   map.addSource("hex", {
     type: "vector",
     url: "pmtiles://" + PMTILES_URL
@@ -159,15 +219,14 @@ map.on("load", () => {
       "source-layer": `h3_r${String(info.res).padStart(2, "0")}`,
       minzoom: info.minzoom,
       maxzoom: info.maxzoom,
-      filter: ["==", ["to-number", ["get", "ano"]], ANO_INICIAL],
+      filter: ["==", ["to-number", ["get", "ano"]], anoAtivo],
       paint: {
-        "fill-color": buildFillColorExpr(VARIAVEL_INICIAL),
+        "fill-color": buildFillColorExpr(variavelAtiva, paletaAtiva),
         "fill-opacity": 0.85,
         "fill-outline-color": "rgba(255,255,255,0.3)"
       }
     });
 
-    // popup ao clicar
     map.on("click", id, (e) => {
       const props = e.features[0].properties;
       new maplibregl.Popup()
@@ -182,22 +241,25 @@ map.on("load", () => {
     map.on("mouseleave", id, () => { map.getCanvas().style.cursor = ""; });
   });
 
-  atualizarLegenda(VARIAVEL_INICIAL);
-});
+  atualizarLegenda(variavelAtiva, paletaAtiva);
+}
+
+map.on("load", adicionarCamadasHex);
 
 // ------------------------------------------------------------------
-// Legenda dinâmica — reflete a variável ativa
+// Legenda dinâmica — reflete a variável e a paleta ativas
 // ------------------------------------------------------------------
 function formatarNumero(v) {
   if (v >= 1000) return (v / 1000).toFixed(v >= 10000 ? 0 : 1) + "k";
   return String(v);
 }
 
-function atualizarLegenda(coluna) {
+function atualizarLegenda(coluna, paleta) {
   const info = VARIAVEIS[coluna];
+  const cores = PALETAS[paleta].cores;
   document.getElementById("legend-title").textContent = info.label;
   document.getElementById("legend-ramp").style.background =
-    `linear-gradient(to right, ${CORES.join(", ")})`;
+    `linear-gradient(to right, ${cores.join(", ")})`;
   document.getElementById("legend-labels").innerHTML =
     info.values.map(v => `<span>${formatarNumero(v)}</span>`).join("");
 }
@@ -215,11 +277,11 @@ ANOS.forEach(ano => {
 });
 
 selectAno.addEventListener("change", () => {
-  const anoSelecionado = parseInt(selectAno.value, 10);
+  anoAtivo = parseInt(selectAno.value, 10);
   RESOLUCOES.forEach(info => {
     map.setFilter(
       layerId(info.res),
-      ["==", ["to-number", ["get", "ano"]], anoSelecionado]
+      ["==", ["to-number", ["get", "ano"]], anoAtivo]
     );
   });
 });
@@ -237,12 +299,53 @@ Object.keys(VARIAVEIS).forEach(coluna => {
 });
 
 selectVariavel.addEventListener("change", () => {
-  const coluna = selectVariavel.value;
-  const expr = buildFillColorExpr(coluna);
+  variavelAtiva = selectVariavel.value;
+  const expr = buildFillColorExpr(variavelAtiva, paletaAtiva);
   RESOLUCOES.forEach(info => {
     map.setPaintProperty(layerId(info.res), "fill-color", expr);
   });
-  atualizarLegenda(coluna);
+  atualizarLegenda(variavelAtiva, paletaAtiva);
+});
+
+// ------------------------------------------------------------------
+// Seletor de paleta de cores
+// ------------------------------------------------------------------
+const selectPaleta = document.getElementById("paleta-select");
+Object.keys(PALETAS).forEach(paleta => {
+  const opt = document.createElement("option");
+  opt.value = paleta;
+  opt.textContent = PALETAS[paleta].label;
+  if (paleta === PALETA_INICIAL) opt.selected = true;
+  selectPaleta.appendChild(opt);
+});
+
+selectPaleta.addEventListener("change", () => {
+  paletaAtiva = selectPaleta.value;
+  const expr = buildFillColorExpr(variavelAtiva, paletaAtiva);
+  RESOLUCOES.forEach(info => {
+    map.setPaintProperty(layerId(info.res), "fill-color", expr);
+  });
+  atualizarLegenda(variavelAtiva, paletaAtiva);
+});
+
+// ------------------------------------------------------------------
+// Seletor de fundo do mapa
+// ------------------------------------------------------------------
+const selectFundo = document.getElementById("fundo-select");
+Object.keys(BASEMAPS).forEach(fundo => {
+  const opt = document.createElement("option");
+  opt.value = fundo;
+  opt.textContent = BASEMAPS[fundo].label;
+  if (fundo === FUNDO_INICIAL) opt.selected = true;
+  selectFundo.appendChild(opt);
+});
+
+selectFundo.addEventListener("change", () => {
+  const fundo = selectFundo.value;
+  // setStyle() apaga source/layers customizadas — precisam ser
+  // readicionadas depois que o novo estilo terminar de carregar
+  map.setStyle(BASEMAPS[fundo].style);
+  map.once("styledata", adicionarCamadasHex);
 });
 </script>
 
