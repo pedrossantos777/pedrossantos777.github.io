@@ -372,18 +372,19 @@ let opacidadeAtiva = 0.85;
 let estadoAtivo = "todos";
 let regiaoAtiva = "todas";
 let requisicaoAtual = 0;
-let breaksAtivos = null; // [min, ...internos, max] calculado dinamicamente
+let breaksPorResolucao = {}; // { 4: [min,...,max], 6: [...], 8: [...] } — cada resolução tem sua própria escala
 
 function filtroEspacialAtivo() {
-  if (estadoAtivo !== "todos") return ["==", ["get", "uf"], estadoAtivo];
-  if (regiaoAtiva !== "todas") return ["in", ["get", "uf"], ["literal", REGIOES[regiaoAtiva].ufs]];
+  if (estadoAtivo !== "todos") return ["==", ["upcase", ["get", "uf"]], estadoAtivo];
+  if (regiaoAtiva !== "todas") return ["in", ["upcase", ["get", "uf"]], ["literal", REGIOES[regiaoAtiva].ufs]];
   return null;
 }
 
-function buildFillColorExpr() {
-  if (!breaksAtivos) return "#cccccc";
+function buildFillColorExpr(resolucao) {
+  const breaks = breaksPorResolucao[resolucao];
+  if (!breaks) return "#cccccc";
   const cores = amostrarRampa(PALETAS[paletaAtiva].cores, numClassesAtivo);
-  const internos = breaksAtivos.slice(1, -1);
+  const internos = breaks.slice(1, -1);
   const expr = ["step", ["to-number", ["feature-state", "valor"]], cores[0]];
   internos.forEach((b, i) => { expr.push(b, cores[i + 1]); });
   return expr;
@@ -394,11 +395,9 @@ function buildFillOpacityExpr() {
 }
 
 function repintarCamadas() {
-  const corExpr = buildFillColorExpr();
-  const opExpr = buildFillOpacityExpr();
   RESOLUCOES.forEach(info => {
-    map.setPaintProperty(layerId(info.res), "fill-color", corExpr);
-    map.setPaintProperty(layerId(info.res), "fill-opacity", opExpr);
+    map.setPaintProperty(layerId(info.res), "fill-color", buildFillColorExpr(info.res));
+    map.setPaintProperty(layerId(info.res), "fill-opacity", buildFillOpacityExpr());
   });
   atualizarLegenda();
 }
@@ -453,8 +452,8 @@ async function aplicarAtributos(resolucao, ano, tokenRequisicao) {
   }
 }
 
-async function calcularBreaks(tokenRequisicao) {
-  const nomeVirtual = nomeVirtualParquet(RESOLUCAO_AMOSTRA, anoAtivo);
+async function calcularBreaks(resolucao, tokenRequisicao) {
+  const nomeVirtual = nomeVirtualParquet(resolucao, anoAtivo);
 
   if (metodoAtivo === "quantis") {
     const probs = Array.from({ length: numClassesAtivo - 1 }, (_, i) => (i + 1) / numClassesAtivo);
@@ -486,9 +485,11 @@ async function recalcularClassificacao() {
   const token = requisicaoAtual;
   setStatus("Calculando classificação…", "loading");
   try {
-    const breaks = await calcularBreaks(token);
-    if (token !== requisicaoAtual || !breaks) return;
-    breaksAtivos = breaks;
+    const resultados = await Promise.all(
+      RESOLUCOES.map(async info => [info.res, await calcularBreaks(info.res, token)])
+    );
+    if (token !== requisicaoAtual) return;
+    resultados.forEach(([res, breaks]) => { if (breaks) breaksPorResolucao[res] = breaks; });
     repintarCamadas();
     setStatus("", "");
   } catch (err) {
@@ -545,8 +546,8 @@ function adicionarCamadasHex() {
       maxzoom: info.maxzoom,
       filter: filtroEspacial || true,
       paint: {
-        "fill-color": breaksAtivos ? buildFillColorExpr() : "#cccccc",
-        "fill-opacity": breaksAtivos ? buildFillOpacityExpr() : 0.5,
+        "fill-color": breaksPorResolucao[info.res] ? buildFillColorExpr(info.res) : "#cccccc",
+        "fill-opacity": breaksPorResolucao[info.res] ? buildFillOpacityExpr() : 0.5,
         "fill-outline-color": "rgba(255,255,255,0.3)"
       }
     });
@@ -582,15 +583,25 @@ function formatarNumero(v) {
   return v.toFixed(2);
 }
 
+function resolucaoVisivel() {
+  const z = map.getZoom();
+  const encontrada = RESOLUCOES.find(info => z >= info.minzoom && z < info.maxzoom);
+  return (encontrada || RESOLUCOES[RESOLUCOES.length - 1]).res;
+}
+
 function atualizarLegenda() {
-  if (!breaksAtivos) return;
+  const res = resolucaoVisivel();
+  const breaks = breaksPorResolucao[res];
+  if (!breaks) return;
   const cores = amostrarRampa(PALETAS[paletaAtiva].cores, numClassesAtivo);
   const varLabel = expressaoAtiva === variavelAtiva ? VARIAVEIS[variavelAtiva].label : "Fórmula personalizada";
 
-  document.getElementById("legend-title").textContent = varLabel;
+  document.getElementById("legend-title").textContent = `${varLabel} (res. H3 ${res})`;
   document.getElementById("legend-ramp").innerHTML = cores.map(c => `<div style="background:${c}"></div>`).join("");
-  document.getElementById("legend-labels").innerHTML = breaksAtivos.map(v => `<span>${formatarNumero(v)}</span>`).join("");
+  document.getElementById("legend-labels").innerHTML = breaks.map(v => `<span>${formatarNumero(v)}</span>`).join("");
 }
+
+map.on("zoomend", atualizarLegenda);
 
 // ==================================================================
 // Zoom automático por estado/região
