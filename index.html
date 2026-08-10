@@ -23,12 +23,32 @@
     border-radius: 6px;
     box-shadow: 0 1px 4px rgba(0,0,0,0.3);
     font-size: 14px;
-    max-height: 90vh;
+    max-height: 92vh;
     overflow-y: auto;
+    width: 280px;
   }
-  #controls label { display: block; margin-bottom: 4px; margin-top: 8px; font-weight: 600; }
+  #controls label { display: block; margin-bottom: 4px; margin-top: 10px; font-weight: 600; }
   #controls label:first-child { margin-top: 0; }
-  #controls select { font-size: 14px; padding: 4px; width: 100%; }
+  #controls select, #controls input[type="text"] { font-size: 14px; padding: 4px; width: 100%; box-sizing: border-box; }
+  #controls .hint { font-size: 11px; color: #888; margin-top: 3px; }
+  #controls hr { border: none; border-top: 1px solid #e5e5e5; margin: 12px 0; }
+  #controls button {
+    margin-top: 6px;
+    width: 100%;
+    padding: 7px;
+    font-size: 13px;
+    font-weight: 600;
+    background: #21908d;
+    color: white;
+    border: none;
+    border-radius: 4px;
+    cursor: pointer;
+  }
+  #controls button:hover { background: #197b78; }
+  #controls button.secundario { background: #666; }
+  #controls button.secundario:hover { background: #444; }
+
+  #opacidade-valor { font-weight: 400; color: #666; }
 
   #status {
     font-size: 12px;
@@ -52,18 +72,21 @@
   }
   #legend .title { font-weight: 600; margin-bottom: 6px; }
   #legend .ramp {
-    width: 200px;
-    height: 12px;
-    background: linear-gradient(to right, #440154, #3b528b, #21908d, #5dc863, #fde725);
+    display: flex;
+    width: 220px;
+    height: 16px;
     border-radius: 2px;
+    overflow: hidden;
   }
+  #legend .ramp > div { flex: 1; }
   #legend .labels {
     display: flex;
     justify-content: space-between;
     margin-top: 4px;
-    font-size: 11px;
+    font-size: 10px;
     color: #444;
   }
+  #legend .nota { font-size: 10px; color: #999; margin-top: 6px; }
 
   .maplibregl-popup-content {
     font-size: 13px;
@@ -81,8 +104,30 @@
   <label for="variavel-select">Variável</label>
   <select id="variavel-select"></select>
 
+  <label for="formula-input">Fórmula SQL personalizada (opcional)</label>
+  <input type="text" id="formula-input" placeholder="ex.: n_firmas / NULLIF(qt_vinc_ativos, 0)" />
+  <div class="hint">Colunas disponíveis: n_firmas, qt_vinc_ativos. Deixe em branco para usar a variável acima.</div>
+  <button id="formula-btn" class="secundario">Aplicar fórmula</button>
+
+  <hr />
+
+  <label for="metodo-select">Método de classificação</label>
+  <select id="metodo-select">
+    <option value="quantis">Quantis</option>
+    <option value="igual">Intervalos iguais</option>
+    <option value="jenks">Natural breaks (Jenks)</option>
+  </select>
+
+  <label for="classes-select">Número de classes</label>
+  <select id="classes-select"></select>
+
   <label for="paleta-select">Paleta de cores</label>
   <select id="paleta-select"></select>
+
+  <label for="opacidade-input">Opacidade da camada: <span id="opacidade-valor">85%</span></label>
+  <input type="range" id="opacidade-input" min="0" max="100" value="85" />
+
+  <hr />
 
   <label for="fundo-select">Fundo do mapa</label>
   <select id="fundo-select"></select>
@@ -93,6 +138,8 @@
   <label for="estado-select">Estado (UF)</label>
   <select id="estado-select"></select>
 
+  <button id="export-btn">Exportar CSV (resolução 6)</button>
+
   <div id="status"></div>
 </div>
 
@@ -100,23 +147,21 @@
   <div class="title" id="legend-title"></div>
   <div class="ramp" id="legend-ramp"></div>
   <div class="labels" id="legend-labels"></div>
+  <div class="nota">Hexágonos sem dado ficam transparentes</div>
 </div>
 
 <script type="module">
 import * as duckdb from "https://cdn.jsdelivr.net/npm/@duckdb/duckdb-wasm@1.29.0/+esm";
 
 // ==================================================================
-// CONFIGURAÇÃO — ajuste conforme seus dados
+// CONFIGURAÇÃO
 // ==================================================================
-// >>> URL pública real do bucket R2 <<<
 const R2_BASE = "https://pub-a1447fee74634ed59f47ce2ba90a1fbd.r2.dev";
-
 const PMTILES_URL = `${R2_BASE}/geometria.pmtiles`;
-const DATA_BASE = R2_BASE; // arquivos estão na raiz do bucket, não em /dados
+const DATA_BASE = R2_BASE; // arquivos na raiz do bucket
 
-// ATENÇÃO: só existem parquets de 2013 e 2023 no bucket até agora —
-// confirme com table(df$ano) no R se os anos do meio deveriam existir.
-// Quando existirem, é só adicionar aqui (ou trocar pelo Array.from de novo).
+// só existem parquets de 2013 e 2023 até agora — adicione aqui conforme
+// forem gerados novos anos
 const ANOS = [2013, 2023];
 const ANO_INICIAL = 2023;
 
@@ -125,21 +170,29 @@ const RESOLUCOES = [
   { res: 6, minzoom: 7,  maxzoom: 10 },
   { res: 8, minzoom: 10, maxzoom: 14 }
 ];
+// resolução usada como amostra para calcular quebras de classificação
+// (não dá pra usar as 3 ao mesmo tempo — os valores mudam de escala
+// conforme o tamanho do hexágono)
+const RESOLUCAO_AMOSTRA = 6;
 
 const PALETAS = {
-  viridis: { label: "Viridis", cores: ["#440154", "#3b528b", "#21908d", "#5dc863", "#fde725"] },
-  cividis: { label: "Cividis", cores: ["#00204d", "#414d6b", "#7c7b78", "#bcaf6f", "#ffea46"] },
-  blues:   { label: "Azuis (Blues)", cores: ["#eff3ff", "#bdd7e7", "#6baed6", "#3182bd", "#08519c"] },
-  greens:  { label: "Verdes (Greens)", cores: ["#edf8e9", "#bae4b3", "#74c476", "#31a354", "#006d2c"] }
+  viridis:        { label: "Viridis",                cores: ["#440154", "#3b528b", "#21908d", "#5dc863", "#fde725"] },
+  cividis:        { label: "Cividis",                 cores: ["#00204d", "#414d6b", "#7c7b78", "#bcaf6f", "#ffea46"] },
+  blues:          { label: "Azul",                    cores: ["#eff3ff", "#bdd7e7", "#6baed6", "#3182bd", "#08519c"] },
+  greens:         { label: "Verde",                   cores: ["#edf8e9", "#bae4b3", "#74c476", "#31a354", "#006d2c"] },
+  amarelo_vermelho: { label: "Amarelo → Vermelho",    cores: ["#ffffb2", "#fecc5c", "#fd8d3c", "#f03b20", "#bd0026"] },
+  rosa_violeta:   { label: "Rosa / Violeta",           cores: ["#feebe2", "#fbb4b9", "#f768a1", "#c51b8a", "#7a0177"] },
+  divergente:     { label: "Divergente (Vermelho↔Azul)", cores: ["#b2182b", "#ef8a62", "#f7f7f7", "#67a9cf", "#2166ac"] }
 };
 const PALETA_INICIAL = "viridis";
 
-// troque os "values" pelos quartis reais de cada variável
 const VARIAVEIS = {
-  n_firmas: { label: "Quantidade de firmas", values: [0, 25, 50, 100, 200] },
-  qt_vinc_ativos: { label: "Vínculos ativos (trabalhadores)", values: [0, 25, 50, 100, 200] }
+  n_firmas: { label: "Quantidade de firmas" },
+  qt_vinc_ativos: { label: "Vínculos ativos (trabalhadores)" }
 };
 const VARIAVEL_INICIAL = "n_firmas";
+
+const CLASSES_MIN = 4, CLASSES_MAX = 8, CLASSES_INICIAL = 5;
 
 const BASEMAPS = {
   osm: {
@@ -194,19 +247,37 @@ const REGIOES = {
   sul:            { label: "Sul",           ufs: ["PR", "RS", "SC"] }
 };
 
+// bboxes aproximados [oeste, sul, leste, norte] — usados só para zoom
+// automático; não são limites administrativos precisos
+const UF_BBOX = {
+  AC: [-73.99,-11.14,-66.62,-7.35],   AL: [-38.24,-10.50,-35.15,-8.81],
+  AP: [-54.88,-1.24,-49.87,4.44],     AM: [-73.80,-9.82,-56.09,2.25],
+  BA: [-46.62,-18.35,-37.34,-8.53],   CE: [-41.42,-7.86,-37.25,-2.78],
+  DF: [-48.29,-16.05,-47.31,-15.50],  ES: [-41.88,-21.30,-39.65,-17.89],
+  GO: [-53.25,-19.50,-45.90,-12.39],  MA: [-48.75,-10.26,-41.80,-1.04],
+  MT: [-61.63,-18.04,-50.22,-7.35],   MS: [-58.17,-24.07,-50.92,-17.17],
+  MG: [-51.05,-22.92,-39.86,-14.23],  PA: [-58.90,-9.84,-46.06,2.59],
+  PB: [-38.77,-8.32,-34.79,-6.02],    PR: [-54.62,-26.72,-48.02,-22.51],
+  PE: [-41.36,-9.48,-34.81,-7.29],    PI: [-45.99,-10.93,-40.37,-2.74],
+  RJ: [-44.89,-23.37,-40.96,-20.76],  RN: [-38.58,-6.98,-34.97,-4.83],
+  RS: [-57.65,-33.75,-49.69,-27.08],  RO: [-66.81,-13.69,-59.77,-7.97],
+  RR: [-64.82,-1.55,-58.87,5.27],     SC: [-53.84,-29.35,-48.35,-25.96],
+  SP: [-53.11,-25.31,-44.16,-19.78],  SE: [-38.24,-11.57,-36.39,-9.51],
+  TO: [-50.74,-13.46,-45.70,-5.17]
+};
+const BRASIL_BBOX = [-73.99, -33.75, -34.79, 5.27];
+
+function bboxUniao(bboxes) {
+  return [
+    Math.min(...bboxes.map(b => b[0])), Math.min(...bboxes.map(b => b[1])),
+    Math.max(...bboxes.map(b => b[2])), Math.max(...bboxes.map(b => b[3]))
+  ];
+}
+
 function layerId(res) { return `fill-h3-r${String(res).padStart(2, "0")}`; }
 function sourceLayerId(res) { return `h3_r${String(res).padStart(2, "0")}`; }
-
-function buildFillColorExpr(coluna, paleta) {
-  const values = VARIAVEIS[coluna].values;
-  const cores = PALETAS[paleta].cores;
-  // lê do feature-state (dado colado dinamicamente), não de ["get", ...]
-  // coalesce cobre hexágonos sem dado carregado ainda / sem atividade no ano
-  const expr = ["interpolate", ["linear"],
-    ["to-number", ["coalesce", ["feature-state", coluna], 0]]];
-  values.forEach((v, i) => expr.push(v, cores[i]));
-  return expr;
-}
+function nomeVirtualParquet(res, ano) { return `hex_r${res}_${ano}.parquet`; }
+function nomeArquivoRemoto(res, ano) { return `hex_r${String(res).padStart(2, "0")}_${ano}.parquet`; }
 
 function setStatus(msg, tipo) {
   const el = document.getElementById("status");
@@ -215,14 +286,93 @@ function setStatus(msg, tipo) {
 }
 
 // ==================================================================
+// Cores — amostra N cores de uma rampa de 5 cores-âncora
+// ==================================================================
+function hexToRgb(hex) {
+  const n = parseInt(hex.slice(1), 16);
+  return [(n >> 16) & 255, (n >> 8) & 255, n & 255];
+}
+function rgbToHex([r, g, b]) {
+  return "#" + [r, g, b].map(v => Math.round(v).toString(16).padStart(2, "0")).join("");
+}
+function amostrarRampa(coresBase, n) {
+  const rgbs = coresBase.map(hexToRgb);
+  const resultado = [];
+  for (let i = 0; i < n; i++) {
+    const t = n === 1 ? 0 : i / (n - 1);
+    const pos = t * (rgbs.length - 1);
+    const idx = Math.floor(pos);
+    const frac = pos - idx;
+    const a = rgbs[idx], b = rgbs[Math.min(idx + 1, rgbs.length - 1)];
+    resultado.push(rgbToHex(a.map((v, k) => v + (b[k] - v) * frac)));
+  }
+  return resultado;
+}
+
+// ==================================================================
+// Jenks natural breaks (algoritmo clássico) — amostra até 2000 pontos
+// para manter responsivo em bases grandes
+// ==================================================================
+function jenksBreaks(dadosOrdenados, numClasses) {
+  let amostra = dadosOrdenados;
+  if (amostra.length > 2000) {
+    const passo = Math.ceil(amostra.length / 2000);
+    amostra = amostra.filter((_, i) => i % passo === 0);
+  }
+  const n = amostra.length;
+  if (n <= numClasses) return amostra.slice();
+
+  const mat1 = Array.from({ length: n + 1 }, () => new Array(numClasses + 1).fill(0));
+  const mat2 = Array.from({ length: n + 1 }, () => new Array(numClasses + 1).fill(0));
+  for (let i = 1; i <= numClasses; i++) {
+    mat1[1][i] = 1; mat2[1][i] = 0;
+    for (let j = 2; j <= n; j++) mat2[j][i] = Infinity;
+  }
+  let v = 0;
+  for (let l = 2; l <= n; l++) {
+    let s1 = 0, s2 = 0, w = 0;
+    for (let m = 1; m <= l; m++) {
+      const i3 = l - m + 1;
+      const val = amostra[i3 - 1];
+      s2 += val * val; s1 += val; w++;
+      v = s2 - (s1 * s1) / w;
+      const i4 = i3 - 1;
+      if (i4 !== 0) {
+        for (let j = 2; j <= numClasses; j++) {
+          if (mat2[l][j] >= v + mat2[i4][j - 1]) {
+            mat1[l][j] = i3; mat2[l][j] = v + mat2[i4][j - 1];
+          }
+        }
+      }
+    }
+    mat1[l][1] = 1; mat2[l][1] = v;
+  }
+  const kClass = new Array(numClasses + 1);
+  kClass[numClasses] = amostra[n - 1];
+  kClass[0] = amostra[0];
+  let k = n;
+  for (let j = numClasses; j >= 2; j--) {
+    const id = mat1[k][j] - 2;
+    kClass[j - 1] = amostra[id];
+    k = mat1[k][j] - 1;
+  }
+  return kClass; // n+1 valores: mínimo, quebras internas, máximo
+}
+
+// ==================================================================
 // Estado global
 // ==================================================================
 let anoAtivo = ANO_INICIAL;
 let variavelAtiva = VARIAVEL_INICIAL;
+let expressaoAtiva = VARIAVEL_INICIAL; // coluna ou fórmula SQL customizada
 let paletaAtiva = PALETA_INICIAL;
+let metodoAtivo = "quantis";
+let numClassesAtivo = CLASSES_INICIAL;
+let opacidadeAtiva = 0.85;
 let estadoAtivo = "todos";
 let regiaoAtiva = "todas";
-let requisicaoAtual = 0; // token para ignorar respostas de trocas de ano rápidas demais
+let requisicaoAtual = 0;
+let breaksAtivos = null; // [min, ...internos, max] calculado dinamicamente
 
 function filtroEspacialAtivo() {
   if (estadoAtivo !== "todos") return ["==", ["get", "uf"], estadoAtivo];
@@ -230,11 +380,33 @@ function filtroEspacialAtivo() {
   return null;
 }
 
+function buildFillColorExpr() {
+  if (!breaksAtivos) return "#cccccc";
+  const cores = amostrarRampa(PALETAS[paletaAtiva].cores, numClassesAtivo);
+  const internos = breaksAtivos.slice(1, -1);
+  const expr = ["step", ["to-number", ["feature-state", "valor"]], cores[0]];
+  internos.forEach((b, i) => { expr.push(b, cores[i + 1]); });
+  return expr;
+}
+
+function buildFillOpacityExpr() {
+  return ["case", ["==", ["feature-state", "valor"], null], 0, opacidadeAtiva];
+}
+
+function repintarCamadas() {
+  const corExpr = buildFillColorExpr();
+  const opExpr = buildFillOpacityExpr();
+  RESOLUCOES.forEach(info => {
+    map.setPaintProperty(layerId(info.res), "fill-color", corExpr);
+    map.setPaintProperty(layerId(info.res), "fill-opacity", opExpr);
+  });
+  atualizarLegenda();
+}
+
 // ==================================================================
-// DuckDB-WASM — inicialização
+// DuckDB-WASM
 // ==================================================================
-let db;
-let conn;
+let db, conn;
 
 async function iniciarDuckDB() {
   setStatus("Carregando motor de consulta…", "loading");
@@ -249,37 +421,79 @@ async function iniciarDuckDB() {
   setStatus("", "");
 }
 
-// busca o parquet do ano/resolução e aplica como feature-state
-//
-// NOTA: em vez de deixar o DuckDB-WASM ler o arquivo remoto via HTTP
-// Range requests (read_parquet('https://...') direto), baixamos o
-// arquivo inteiro com fetch() e registramos em memória antes de
-// consultar. Isso evita um bug conhecido do DuckDB-WASM (TProtocolException:
-// Invalid data) que ocorre em alguns ambientes (Windows + Chrome/Edge)
-// ao fazer leitura parcial de Parquet remoto. Como os parquets de
-// atributo são pequenos, baixar o arquivo inteiro não pesa.
-async function aplicarAtributos(resolucao, ano, tokenRequisicao) {
-  const sourceLayer = sourceLayerId(resolucao);
-  const url = `${DATA_BASE}/hex_r${String(resolucao).padStart(2, "0")}_${ano}.parquet`;
-  const nomeVirtual = `hex_r${resolucao}_${ano}.parquet`;
-
+// baixa o parquet inteiro e registra em memória (evita bug de leitura
+// parcial por HTTP Range do DuckDB-WASM em alguns navegadores/SOs)
+async function registrarParquet(resolucao, ano) {
+  const url = `${DATA_BASE}/${nomeArquivoRemoto(resolucao, ano)}`;
+  const nomeVirtual = nomeVirtualParquet(resolucao, ano);
   const resp = await fetch(url, { cache: "no-store" });
   if (!resp.ok) throw new Error(`HTTP ${resp.status} ao buscar ${url}`);
   const buffer = new Uint8Array(await resp.arrayBuffer());
   await db.registerFileBuffer(nomeVirtual, buffer);
+  return nomeVirtual;
+}
 
-  if (tokenRequisicao !== requisicaoAtual) return; // usuário já trocou de ano de novo — descarta
+async function aplicarAtributos(resolucao, ano, tokenRequisicao) {
+  const sourceLayer = sourceLayerId(resolucao);
+  const nomeVirtual = await registrarParquet(resolucao, ano);
 
-  const result = await conn.query(`SELECT h3_address, n_firmas, qt_vinc_ativos FROM read_parquet('${nomeVirtual}')`);
+  if (tokenRequisicao !== requisicaoAtual) return;
 
+  const result = await conn.query(
+    `SELECT h3_address, n_firmas, qt_vinc_ativos, (${expressaoAtiva}) AS valor FROM read_parquet('${nomeVirtual}')`
+  );
   if (tokenRequisicao !== requisicaoAtual) return;
 
   map.removeFeatureState({ source: "hex", sourceLayer });
   for (const row of result.toArray()) {
     map.setFeatureState(
       { source: "hex", sourceLayer, id: row.h3_address },
-      { n_firmas: Number(row.n_firmas), qt_vinc_ativos: Number(row.qt_vinc_ativos) }
+      { n_firmas: Number(row.n_firmas), qt_vinc_ativos: Number(row.qt_vinc_ativos), valor: Number(row.valor) }
     );
+  }
+}
+
+async function calcularBreaks(tokenRequisicao) {
+  const nomeVirtual = nomeVirtualParquet(RESOLUCAO_AMOSTRA, anoAtivo);
+
+  if (metodoAtivo === "quantis") {
+    const probs = Array.from({ length: numClassesAtivo - 1 }, (_, i) => (i + 1) / numClassesAtivo);
+    const r = await conn.query(
+      `SELECT min(${expressaoAtiva}) AS mn, max(${expressaoAtiva}) AS mx, quantile_cont((${expressaoAtiva}), [${probs.join(",")}]) AS qs FROM read_parquet('${nomeVirtual}')`
+    );
+    if (tokenRequisicao !== requisicaoAtual) return null;
+    const row = r.toArray()[0];
+    const qs = Array.from(row.qs);
+    return [Number(row.mn), ...qs.map(Number), Number(row.mx)];
+  }
+
+  if (metodoAtivo === "igual") {
+    const r = await conn.query(`SELECT min(${expressaoAtiva}) AS mn, max(${expressaoAtiva}) AS mx FROM read_parquet('${nomeVirtual}')`);
+    if (tokenRequisicao !== requisicaoAtual) return null;
+    const { mn, mx } = r.toArray()[0];
+    const passo = (Number(mx) - Number(mn)) / numClassesAtivo;
+    return Array.from({ length: numClassesAtivo + 1 }, (_, i) => Number(mn) + passo * i);
+  }
+
+  // jenks — precisa dos valores brutos no JS
+  const r = await conn.query(`SELECT (${expressaoAtiva}) AS v FROM read_parquet('${nomeVirtual}') WHERE (${expressaoAtiva}) IS NOT NULL ORDER BY v`);
+  if (tokenRequisicao !== requisicaoAtual) return null;
+  const valores = r.toArray().map(row => Number(row.v));
+  return jenksBreaks(valores, numClassesAtivo);
+}
+
+async function recalcularClassificacao() {
+  const token = requisicaoAtual;
+  setStatus("Calculando classificação…", "loading");
+  try {
+    const breaks = await calcularBreaks(token);
+    if (token !== requisicaoAtual || !breaks) return;
+    breaksAtivos = breaks;
+    repintarCamadas();
+    setStatus("", "");
+  } catch (err) {
+    setStatus(`Erro na classificação: ${err.message}`, "erro");
+    console.error(err);
   }
 }
 
@@ -288,7 +502,8 @@ async function carregarAno(ano) {
   setStatus(`Carregando dados de ${ano}…`, "loading");
   try {
     await Promise.all(RESOLUCOES.map(info => aplicarAtributos(info.res, ano, token)));
-    if (token === requisicaoAtual) setStatus("", "");
+    if (token !== requisicaoAtual) return;
+    await recalcularClassificacao();
   } catch (err) {
     if (token === requisicaoAtual) setStatus(`Erro ao carregar ${ano}: ${err.message}`, "erro");
     console.error(err);
@@ -314,11 +529,7 @@ function adicionarCamadasHex() {
   map.addSource("hex", {
     type: "vector",
     url: "pmtiles://" + PMTILES_URL,
-    promoteId: {
-      h3_r04: "h3_address",
-      h3_r06: "h3_address",
-      h3_r08: "h3_address"
-    }
+    promoteId: { h3_r04: "h3_address", h3_r06: "h3_address", h3_r08: "h3_address" }
   });
 
   RESOLUCOES.forEach(info => {
@@ -334,8 +545,8 @@ function adicionarCamadasHex() {
       maxzoom: info.maxzoom,
       filter: filtroEspacial || true,
       paint: {
-        "fill-color": buildFillColorExpr(variavelAtiva, paletaAtiva),
-        "fill-opacity": 0.85,
+        "fill-color": breaksAtivos ? buildFillColorExpr() : "#cccccc",
+        "fill-opacity": breaksAtivos ? buildFillOpacityExpr() : 0.5,
         "fill-outline-color": "rgba(255,255,255,0.3)"
       }
     });
@@ -346,7 +557,7 @@ function adicionarCamadasHex() {
       new maplibregl.Popup()
         .setLngLat(e.lngLat)
         .setHTML(
-          `UF: ${f.properties.uf}<br>Firmas: ${state.n_firmas ?? "—"}<br>Vínculos ativos: ${state.qt_vinc_ativos ?? "—"}<br>Ano: ${anoAtivo}`
+          `UF: ${f.properties.uf}<br>Firmas: ${state.n_firmas ?? "—"}<br>Vínculos ativos: ${state.qt_vinc_ativos ?? "—"}<br>Valor exibido: ${state.valor ?? "—"}<br>Ano: ${anoAtivo}`
         )
         .addTo(map);
     });
@@ -354,8 +565,6 @@ function adicionarCamadasHex() {
     map.on("mouseenter", id, () => { map.getCanvas().style.cursor = "pointer"; });
     map.on("mouseleave", id, () => { map.getCanvas().style.cursor = ""; });
   });
-
-  atualizarLegenda(variavelAtiva, paletaAtiva);
 }
 
 map.on("load", async () => {
@@ -365,19 +574,68 @@ map.on("load", async () => {
 });
 
 // ==================================================================
-// Legenda
+// Legenda (discreta — uma cor por classe)
 // ==================================================================
 function formatarNumero(v) {
-  if (v >= 1000) return (v / 1000).toFixed(v >= 10000 ? 0 : 1) + "k";
-  return String(v);
+  if (Math.abs(v) >= 1000) return (v / 1000).toFixed(Math.abs(v) >= 10000 ? 0 : 1) + "k";
+  if (Number.isInteger(v)) return String(v);
+  return v.toFixed(2);
 }
 
-function atualizarLegenda(coluna, paleta) {
-  const info = VARIAVEIS[coluna];
-  const cores = PALETAS[paleta].cores;
-  document.getElementById("legend-title").textContent = info.label;
-  document.getElementById("legend-ramp").style.background = `linear-gradient(to right, ${cores.join(", ")})`;
-  document.getElementById("legend-labels").innerHTML = info.values.map(v => `<span>${formatarNumero(v)}</span>`).join("");
+function atualizarLegenda() {
+  if (!breaksAtivos) return;
+  const cores = amostrarRampa(PALETAS[paletaAtiva].cores, numClassesAtivo);
+  const varLabel = expressaoAtiva === variavelAtiva ? VARIAVEIS[variavelAtiva].label : "Fórmula personalizada";
+
+  document.getElementById("legend-title").textContent = varLabel;
+  document.getElementById("legend-ramp").innerHTML = cores.map(c => `<div style="background:${c}"></div>`).join("");
+  document.getElementById("legend-labels").innerHTML = breaksAtivos.map(v => `<span>${formatarNumero(v)}</span>`).join("");
+}
+
+// ==================================================================
+// Zoom automático por estado/região
+// ==================================================================
+function aplicarZoomEspacial() {
+  if (estadoAtivo !== "todos") {
+    map.fitBounds(UF_BBOX[estadoAtivo], { padding: 30, duration: 800 });
+  } else if (regiaoAtiva !== "todas") {
+    const bbox = bboxUniao(REGIOES[regiaoAtiva].ufs.map(uf => UF_BBOX[uf]));
+    map.fitBounds(bbox, { padding: 30, duration: 800 });
+  } else {
+    map.fitBounds(BRASIL_BBOX, { padding: 20, duration: 800 });
+  }
+}
+
+function aplicarFiltroEspacial() {
+  const filtro = filtroEspacialAtivo();
+  RESOLUCOES.forEach(info => map.setFilter(layerId(info.res), filtro || true));
+  aplicarZoomEspacial();
+}
+
+// ==================================================================
+// Exportar CSV
+// ==================================================================
+async function exportarCSV() {
+  setStatus("Gerando CSV…", "loading");
+  try {
+    const nomeVirtual = nomeVirtualParquet(RESOLUCAO_AMOSTRA, anoAtivo);
+    const r = await conn.query(
+      `SELECT h3_address, n_firmas, qt_vinc_ativos, (${expressaoAtiva}) AS valor FROM read_parquet('${nomeVirtual}')`
+    );
+    const linhas = r.toArray();
+    const header = "h3_address,n_firmas,qt_vinc_ativos,valor";
+    const corpo = linhas.map(row => `${row.h3_address},${row.n_firmas},${row.qt_vinc_ativos},${row.valor}`).join("\n");
+    const blob = new Blob([header + "\n" + corpo], { type: "text/csv;charset=utf-8;" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url; a.download = `hex_r0${RESOLUCAO_AMOSTRA}_${anoAtivo}.csv`;
+    document.body.appendChild(a); a.click(); document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+    setStatus("", "");
+  } catch (err) {
+    setStatus(`Erro ao exportar: ${err.message}`, "erro");
+    console.error(err);
+  }
 }
 
 // ==================================================================
@@ -392,7 +650,7 @@ ANOS.forEach(ano => {
 });
 selectAno.addEventListener("change", () => {
   anoAtivo = parseInt(selectAno.value, 10);
-  carregarAno(anoAtivo); // assíncrono — busca o parquet daquele ano
+  carregarAno(anoAtivo);
 });
 
 const selectVariavel = document.getElementById("variavel-select");
@@ -404,9 +662,34 @@ Object.keys(VARIAVEIS).forEach(coluna => {
 });
 selectVariavel.addEventListener("change", () => {
   variavelAtiva = selectVariavel.value;
-  const expr = buildFillColorExpr(variavelAtiva, paletaAtiva);
-  RESOLUCOES.forEach(info => map.setPaintProperty(layerId(info.res), "fill-color", expr));
-  atualizarLegenda(variavelAtiva, paletaAtiva);
+  document.getElementById("formula-input").value = "";
+  expressaoAtiva = variavelAtiva;
+  carregarAno(anoAtivo);
+});
+
+document.getElementById("formula-btn").addEventListener("click", () => {
+  const formula = document.getElementById("formula-input").value.trim();
+  expressaoAtiva = formula || variavelAtiva;
+  carregarAno(anoAtivo);
+});
+
+const selectMetodo = document.getElementById("metodo-select");
+selectMetodo.value = metodoAtivo;
+selectMetodo.addEventListener("change", () => {
+  metodoAtivo = selectMetodo.value;
+  recalcularClassificacao();
+});
+
+const selectClasses = document.getElementById("classes-select");
+for (let n = CLASSES_MIN; n <= CLASSES_MAX; n++) {
+  const opt = document.createElement("option");
+  opt.value = n; opt.textContent = n;
+  if (n === CLASSES_INICIAL) opt.selected = true;
+  selectClasses.appendChild(opt);
+}
+selectClasses.addEventListener("change", () => {
+  numClassesAtivo = parseInt(selectClasses.value, 10);
+  recalcularClassificacao();
 });
 
 const selectPaleta = document.getElementById("paleta-select");
@@ -418,9 +701,14 @@ Object.keys(PALETAS).forEach(paleta => {
 });
 selectPaleta.addEventListener("change", () => {
   paletaAtiva = selectPaleta.value;
-  const expr = buildFillColorExpr(variavelAtiva, paletaAtiva);
-  RESOLUCOES.forEach(info => map.setPaintProperty(layerId(info.res), "fill-color", expr));
-  atualizarLegenda(variavelAtiva, paletaAtiva);
+  repintarCamadas();
+});
+
+const inputOpacidade = document.getElementById("opacidade-input");
+inputOpacidade.addEventListener("input", () => {
+  opacidadeAtiva = parseInt(inputOpacidade.value, 10) / 100;
+  document.getElementById("opacidade-valor").textContent = `${inputOpacidade.value}%`;
+  RESOLUCOES.forEach(info => map.setPaintProperty(layerId(info.res), "fill-opacity", buildFillOpacityExpr()));
 });
 
 const selectFundo = document.getElementById("fundo-select");
@@ -435,7 +723,7 @@ selectFundo.addEventListener("change", async () => {
   map.setStyle(BASEMAPS[fundo].style);
   map.once("styledata", async () => {
     adicionarCamadasHex();
-    await carregarAno(anoAtivo); // feature-state se perde junto com o estilo — recarrega
+    await carregarAno(anoAtivo);
   });
 });
 
@@ -454,8 +742,7 @@ selectRegiao.addEventListener("change", () => {
     estadoAtivo = "todos";
     selectEstado.value = "todos";
   }
-  const filtro = filtroEspacialAtivo();
-  RESOLUCOES.forEach(info => map.setFilter(layerId(info.res), filtro || true));
+  aplicarFiltroEspacial();
 });
 
 const selectEstado = document.getElementById("estado-select");
@@ -473,9 +760,10 @@ selectEstado.addEventListener("change", () => {
     regiaoAtiva = "todas";
     selectRegiao.value = "todas";
   }
-  const filtro = filtroEspacialAtivo();
-  RESOLUCOES.forEach(info => map.setFilter(layerId(info.res), filtro || true));
+  aplicarFiltroEspacial();
 });
+
+document.getElementById("export-btn").addEventListener("click", exportarCSV);
 </script>
 
 </body>
