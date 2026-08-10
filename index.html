@@ -2,7 +2,7 @@
 <html lang="pt-BR">
 <head>
 <meta charset="utf-8" />
-<title>Firmas por hexágono H3</title>
+<title>Firmas e vínculos por hexágono H3 — Brasil</title>
 <meta name="viewport" content="initial-scale=1,maximum-scale=1,user-scalable=no" />
 
 <link href="https://unpkg.com/maplibre-gl@4/dist/maplibre-gl.css" rel="stylesheet" />
@@ -23,10 +23,21 @@
     border-radius: 6px;
     box-shadow: 0 1px 4px rgba(0,0,0,0.3);
     font-size: 14px;
+    max-height: 90vh;
+    overflow-y: auto;
   }
   #controls label { display: block; margin-bottom: 4px; margin-top: 8px; font-weight: 600; }
   #controls label:first-child { margin-top: 0; }
   #controls select { font-size: 14px; padding: 4px; width: 100%; }
+
+  #status {
+    font-size: 12px;
+    color: #777;
+    margin-top: 10px;
+    min-height: 16px;
+  }
+  #status.loading { color: #21908d; }
+  #status.erro { color: #c0392b; }
 
   #legend {
     position: absolute;
@@ -69,6 +80,20 @@
 
   <label for="variavel-select">Variável</label>
   <select id="variavel-select"></select>
+
+  <label for="paleta-select">Paleta de cores</label>
+  <select id="paleta-select"></select>
+
+  <label for="fundo-select">Fundo do mapa</label>
+  <select id="fundo-select"></select>
+
+  <label for="regiao-select">Região</label>
+  <select id="regiao-select"></select>
+
+  <label for="estado-select">Estado (UF)</label>
+  <select id="estado-select"></select>
+
+  <div id="status"></div>
 </div>
 
 <div id="legend">
@@ -77,94 +102,251 @@
   <div class="labels" id="legend-labels"></div>
 </div>
 
-<script>
-// ------------------------------------------------------------------
-// CONFIGURAÇÃO
-// ------------------------------------------------------------------
-// URL ATUALIZADA PARA O CLOUDFLARE R2
-const PMTILES_URL = "https://pub-a1447fee74634ed59f47ce2ba90a1fbd.r2.dev/hex_rj.pmtiles";   
-const ANOS = [2022, 2023];             
+<script type="module">
+import * as duckdb from "https://cdn.jsdelivr.net/npm/@duckdb/duckdb-wasm@1.29.0/+esm";
+
+// ==================================================================
+// CONFIGURAÇÃO — ajuste conforme seus dados
+// ==================================================================
+// >>> URL pública real do bucket R2 <<<
+const R2_BASE = "https://pub-a1447fee74634ed59f47ce2ba90a1fbd.r2.dev";
+
+const PMTILES_URL = `${R2_BASE}/geometria.pmtiles`;
+const DATA_BASE = R2_BASE; // arquivos estão na raiz do bucket, não em /dados
+
+// ATENÇÃO: só existem parquets de 2013 e 2023 no bucket até agora —
+// confirme com table(df$ano) no R se os anos do meio deveriam existir.
+// Quando existirem, é só adicionar aqui (ou trocar pelo Array.from de novo).
+const ANOS = [2013, 2023];
 const ANO_INICIAL = 2023;
 
 const RESOLUCOES = [
-  { res: 4, minzoom: 0,  maxzoom: 6  },
-  { res: 6, minzoom: 6,  maxzoom: 9  },
-  { res: 8, minzoom: 9,  maxzoom: 14 }
+  { res: 4, minzoom: 0,  maxzoom: 7  },
+  { res: 6, minzoom: 7,  maxzoom: 10 },
+  { res: 8, minzoom: 10, maxzoom: 14 }
 ];
 
-const CORES = ["#440154", "#3b528b", "#21908d", "#5dc863", "#fde725"];
-
-const VARIAVEIS = {
-  F001: { label: "Quantidade de firmas (F001)", values: [0, 11, 44, 220, 17001] },
-  T001: { label: "Quantidade de trabalhadores (T001)", values: [0, 60, 380, 3256, 755655] }
+const PALETAS = {
+  viridis: { label: "Viridis", cores: ["#440154", "#3b528b", "#21908d", "#5dc863", "#fde725"] },
+  cividis: { label: "Cividis", cores: ["#00204d", "#414d6b", "#7c7b78", "#bcaf6f", "#ffea46"] },
+  blues:   { label: "Azuis (Blues)", cores: ["#eff3ff", "#bdd7e7", "#6baed6", "#3182bd", "#08519c"] },
+  greens:  { label: "Verdes (Greens)", cores: ["#edf8e9", "#bae4b3", "#74c476", "#31a354", "#006d2c"] }
 };
-const VARIAVEL_INICIAL = "F001";
+const PALETA_INICIAL = "viridis";
 
-function buildFillColorExpr(coluna) {
+// troque os "values" pelos quartis reais de cada variável
+const VARIAVEIS = {
+  n_firmas: { label: "Quantidade de firmas", values: [0, 25, 50, 100, 200] },
+  qt_vinc_ativos: { label: "Vínculos ativos (trabalhadores)", values: [0, 25, 50, 100, 200] }
+};
+const VARIAVEL_INICIAL = "n_firmas";
+
+const BASEMAPS = {
+  osm: {
+    label: "OpenStreetMap",
+    style: {
+      version: 8,
+      sources: { basemap: { type: "raster", tiles: ["https://tile.openstreetmap.org/{z}/{x}/{y}.png"], tileSize: 256, attribution: "&copy; OpenStreetMap contributors" } },
+      layers: [{ id: "basemap", type: "raster", source: "basemap" }]
+    }
+  },
+  satelite: {
+    label: "Satélite",
+    style: {
+      version: 8,
+      sources: { basemap: { type: "raster", tiles: ["https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}"], tileSize: 256, attribution: "Esri, Maxar, Earthstar Geographics" } },
+      layers: [{ id: "basemap", type: "raster", source: "basemap" }]
+    }
+  },
+  relevo: {
+    label: "Relevo",
+    style: {
+      version: 8,
+      sources: { basemap: { type: "raster", tiles: ["https://tile.opentopomap.org/{z}/{x}/{y}.png"], tileSize: 256, attribution: "&copy; OpenStreetMap contributors, SRTM | Map style: &copy; OpenTopoMap" } },
+      layers: [{ id: "basemap", type: "raster", source: "basemap" }]
+    }
+  }
+};
+const FUNDO_INICIAL = "osm";
+
+const UFS = [
+  { sigla: "AC", nome: "Acre" }, { sigla: "AL", nome: "Alagoas" },
+  { sigla: "AP", nome: "Amapá" }, { sigla: "AM", nome: "Amazonas" },
+  { sigla: "BA", nome: "Bahia" }, { sigla: "CE", nome: "Ceará" },
+  { sigla: "DF", nome: "Distrito Federal" }, { sigla: "ES", nome: "Espírito Santo" },
+  { sigla: "GO", nome: "Goiás" }, { sigla: "MA", nome: "Maranhão" },
+  { sigla: "MT", nome: "Mato Grosso" }, { sigla: "MS", nome: "Mato Grosso do Sul" },
+  { sigla: "MG", nome: "Minas Gerais" }, { sigla: "PA", nome: "Pará" },
+  { sigla: "PB", nome: "Paraíba" }, { sigla: "PR", nome: "Paraná" },
+  { sigla: "PE", nome: "Pernambuco" }, { sigla: "PI", nome: "Piauí" },
+  { sigla: "RJ", nome: "Rio de Janeiro" }, { sigla: "RN", nome: "Rio Grande do Norte" },
+  { sigla: "RS", nome: "Rio Grande do Sul" }, { sigla: "RO", nome: "Rondônia" },
+  { sigla: "RR", nome: "Roraima" }, { sigla: "SC", nome: "Santa Catarina" },
+  { sigla: "SP", nome: "São Paulo" }, { sigla: "SE", nome: "Sergipe" },
+  { sigla: "TO", nome: "Tocantins" }
+];
+
+const REGIOES = {
+  norte:          { label: "Norte",        ufs: ["AC", "AP", "AM", "PA", "RO", "RR", "TO"] },
+  nordeste:       { label: "Nordeste",      ufs: ["AL", "BA", "CE", "MA", "PB", "PE", "PI", "RN", "SE"] },
+  "centro-oeste": { label: "Centro-Oeste",  ufs: ["DF", "GO", "MT", "MS"] },
+  sudeste:        { label: "Sudeste",       ufs: ["ES", "MG", "RJ", "SP"] },
+  sul:            { label: "Sul",           ufs: ["PR", "RS", "SC"] }
+};
+
+function layerId(res) { return `fill-h3-r${String(res).padStart(2, "0")}`; }
+function sourceLayerId(res) { return `h3_r${String(res).padStart(2, "0")}`; }
+
+function buildFillColorExpr(coluna, paleta) {
   const values = VARIAVEIS[coluna].values;
-  const expr = ["interpolate", ["linear"], ["log10", ["+", ["to-number", ["get", coluna]], 1]]];
-  values.forEach((v, i) => { expr.push(Math.log10(v + 1), CORES[i]); });
+  const cores = PALETAS[paleta].cores;
+  // lê do feature-state (dado colado dinamicamente), não de ["get", ...]
+  // coalesce cobre hexágonos sem dado carregado ainda / sem atividade no ano
+  const expr = ["interpolate", ["linear"],
+    ["to-number", ["coalesce", ["feature-state", coluna], 0]]];
+  values.forEach((v, i) => expr.push(v, cores[i]));
   return expr;
 }
 
-function layerId(res) {
-  return `fill-h3-r${String(res).padStart(2, "0")}`;
+function setStatus(msg, tipo) {
+  const el = document.getElementById("status");
+  el.textContent = msg;
+  el.className = tipo || "";
 }
-// ------------------------------------------------------------------
 
+// ==================================================================
+// Estado global
+// ==================================================================
+let anoAtivo = ANO_INICIAL;
+let variavelAtiva = VARIAVEL_INICIAL;
+let paletaAtiva = PALETA_INICIAL;
+let estadoAtivo = "todos";
+let regiaoAtiva = "todas";
+let requisicaoAtual = 0; // token para ignorar respostas de trocas de ano rápidas demais
+
+function filtroEspacialAtivo() {
+  if (estadoAtivo !== "todos") return ["==", ["get", "uf"], estadoAtivo];
+  if (regiaoAtiva !== "todas") return ["in", ["get", "uf"], ["literal", REGIOES[regiaoAtiva].ufs]];
+  return null;
+}
+
+// ==================================================================
+// DuckDB-WASM — inicialização
+// ==================================================================
+let db;
+let conn;
+
+async function iniciarDuckDB() {
+  setStatus("Carregando motor de consulta…", "loading");
+  const bundle = await duckdb.selectBundle(duckdb.getJsDelivrBundles());
+  const workerUrl = URL.createObjectURL(
+    new Blob([`importScripts("${bundle.mainWorker}");`], { type: "text/javascript" })
+  );
+  db = new duckdb.AsyncDuckDB(new duckdb.ConsoleLogger(), new Worker(workerUrl));
+  await db.instantiate(bundle.mainModule, bundle.pthreadWorker);
+  URL.revokeObjectURL(workerUrl);
+  conn = await db.connect();
+  setStatus("", "");
+}
+
+// busca o parquet do ano/resolução e aplica como feature-state
+//
+// NOTA: em vez de deixar o DuckDB-WASM ler o arquivo remoto via HTTP
+// Range requests (read_parquet('https://...') direto), baixamos o
+// arquivo inteiro com fetch() e registramos em memória antes de
+// consultar. Isso evita um bug conhecido do DuckDB-WASM (TProtocolException:
+// Invalid data) que ocorre em alguns ambientes (Windows + Chrome/Edge)
+// ao fazer leitura parcial de Parquet remoto. Como os parquets de
+// atributo são pequenos, baixar o arquivo inteiro não pesa.
+async function aplicarAtributos(resolucao, ano, tokenRequisicao) {
+  const sourceLayer = sourceLayerId(resolucao);
+  const url = `${DATA_BASE}/hex_r${String(resolucao).padStart(2, "0")}_${ano}.parquet`;
+  const nomeVirtual = `hex_r${resolucao}_${ano}.parquet`;
+
+  const resp = await fetch(url, { cache: "no-store" });
+  if (!resp.ok) throw new Error(`HTTP ${resp.status} ao buscar ${url}`);
+  const buffer = new Uint8Array(await resp.arrayBuffer());
+  await db.registerFileBuffer(nomeVirtual, buffer);
+
+  if (tokenRequisicao !== requisicaoAtual) return; // usuário já trocou de ano de novo — descarta
+
+  const result = await conn.query(`SELECT h3_address, n_firmas, qt_vinc_ativos FROM read_parquet('${nomeVirtual}')`);
+
+  if (tokenRequisicao !== requisicaoAtual) return;
+
+  map.removeFeatureState({ source: "hex", sourceLayer });
+  for (const row of result.toArray()) {
+    map.setFeatureState(
+      { source: "hex", sourceLayer, id: row.h3_address },
+      { n_firmas: Number(row.n_firmas), qt_vinc_ativos: Number(row.qt_vinc_ativos) }
+    );
+  }
+}
+
+async function carregarAno(ano) {
+  const token = ++requisicaoAtual;
+  setStatus(`Carregando dados de ${ano}…`, "loading");
+  try {
+    await Promise.all(RESOLUCOES.map(info => aplicarAtributos(info.res, ano, token)));
+    if (token === requisicaoAtual) setStatus("", "");
+  } catch (err) {
+    if (token === requisicaoAtual) setStatus(`Erro ao carregar ${ano}: ${err.message}`, "erro");
+    console.error(err);
+  }
+}
+
+// ==================================================================
+// Mapa
+// ==================================================================
 let protocol = new pmtiles.Protocol();
 maplibregl.addProtocol("pmtiles", protocol.tile);
 
 const map = new maplibregl.Map({
   container: "map",
-  style: {
-    version: 8,
-    sources: {
-      basemap: {
-        type: "raster",
-        tiles: ["https://tile.openstreetmap.org/{z}/{x}/{y}.png"],
-        tileSize: 256,
-        attribution: "&copy; OpenStreetMap contributors"
-      }
-    },
-    layers: [{ id: "basemap", type: "raster", source: "basemap" }]
-  },
-  center: [-43.2, -22.9],   // Centralizei no RJ, já que os dados parecem ser de lá (hex_rj)
-  zoom: 6
+  style: BASEMAPS[FUNDO_INICIAL].style,
+  center: [-51, -15],
+  zoom: 4
 });
 
 map.addControl(new maplibregl.NavigationControl(), "top-right");
 
-map.on("load", () => {
+function adicionarCamadasHex() {
   map.addSource("hex", {
     type: "vector",
-    url: "pmtiles://" + PMTILES_URL 
+    url: "pmtiles://" + PMTILES_URL,
+    promoteId: {
+      h3_r04: "h3_address",
+      h3_r06: "h3_address",
+      h3_r08: "h3_address"
+    }
   });
 
   RESOLUCOES.forEach(info => {
     const id = layerId(info.res);
+    const filtroEspacial = filtroEspacialAtivo();
+
     map.addLayer({
       id: id,
       type: "fill",
       source: "hex",
-      "source-layer": `h3_r${String(info.res).padStart(2, "0")}`,
+      "source-layer": sourceLayerId(info.res),
       minzoom: info.minzoom,
       maxzoom: info.maxzoom,
-      filter: ["==", ["to-number", ["get", "year"]], ANO_INICIAL],
+      filter: filtroEspacial || true,
       paint: {
-        "fill-color": buildFillColorExpr(VARIAVEL_INICIAL),
+        "fill-color": buildFillColorExpr(variavelAtiva, paletaAtiva),
         "fill-opacity": 0.85,
         "fill-outline-color": "rgba(255,255,255,0.3)"
       }
     });
 
-    // popup ao clicar
     map.on("click", id, (e) => {
-      const props = e.features[0].properties;
+      const f = e.features[0];
+      const state = map.getFeatureState({ source: "hex", sourceLayer: sourceLayerId(info.res), id: f.id });
       new maplibregl.Popup()
         .setLngLat(e.lngLat)
         .setHTML(
-          `F001: ${props.F001}<br>T001: ${props.T001}<br>Ano: ${props.year}`
+          `UF: ${f.properties.uf}<br>Firmas: ${state.n_firmas ?? "—"}<br>Vínculos ativos: ${state.qt_vinc_ativos ?? "—"}<br>Ano: ${anoAtivo}`
         )
         .addTo(map);
     });
@@ -173,67 +355,126 @@ map.on("load", () => {
     map.on("mouseleave", id, () => { map.getCanvas().style.cursor = ""; });
   });
 
-  atualizarLegenda(VARIAVEL_INICIAL);
+  atualizarLegenda(variavelAtiva, paletaAtiva);
+}
+
+map.on("load", async () => {
+  adicionarCamadasHex();
+  await iniciarDuckDB();
+  await carregarAno(anoAtivo);
 });
 
-// ------------------------------------------------------------------
-// Legenda dinâmica
-// ------------------------------------------------------------------
+// ==================================================================
+// Legenda
+// ==================================================================
 function formatarNumero(v) {
   if (v >= 1000) return (v / 1000).toFixed(v >= 10000 ? 0 : 1) + "k";
   return String(v);
 }
 
-function atualizarLegenda(coluna) {
+function atualizarLegenda(coluna, paleta) {
   const info = VARIAVEIS[coluna];
+  const cores = PALETAS[paleta].cores;
   document.getElementById("legend-title").textContent = info.label;
-  document.getElementById("legend-ramp").style.background =
-    `linear-gradient(to right, ${CORES.join(", ")})`;
-  document.getElementById("legend-labels").innerHTML =
-    info.values.map(v => `<span>${formatarNumero(v)}</span>`).join("");
+  document.getElementById("legend-ramp").style.background = `linear-gradient(to right, ${cores.join(", ")})`;
+  document.getElementById("legend-labels").innerHTML = info.values.map(v => `<span>${formatarNumero(v)}</span>`).join("");
 }
 
-// ------------------------------------------------------------------
-// Seletor de ano
-// ------------------------------------------------------------------
+// ==================================================================
+// Seletores
+// ==================================================================
 const selectAno = document.getElementById("ano-select");
 ANOS.forEach(ano => {
   const opt = document.createElement("option");
-  opt.value = ano;
-  opt.textContent = ano;
+  opt.value = ano; opt.textContent = ano;
   if (ano === ANO_INICIAL) opt.selected = true;
   selectAno.appendChild(opt);
 });
-
 selectAno.addEventListener("change", () => {
-  const anoSelecionado = parseInt(selectAno.value, 10);
-  RESOLUCOES.forEach(info => {
-    map.setFilter(
-      layerId(info.res),
-      ["==", ["to-number", ["get", "year"]], anoSelecionado]
-    );
-  });
+  anoAtivo = parseInt(selectAno.value, 10);
+  carregarAno(anoAtivo); // assíncrono — busca o parquet daquele ano
 });
 
-// ------------------------------------------------------------------
-// Seletor de variável (F001 / T001)
-// ------------------------------------------------------------------
 const selectVariavel = document.getElementById("variavel-select");
 Object.keys(VARIAVEIS).forEach(coluna => {
   const opt = document.createElement("option");
-  opt.value = coluna;
-  opt.textContent = VARIAVEIS[coluna].label;
+  opt.value = coluna; opt.textContent = VARIAVEIS[coluna].label;
   if (coluna === VARIAVEL_INICIAL) opt.selected = true;
   selectVariavel.appendChild(opt);
 });
-
 selectVariavel.addEventListener("change", () => {
-  const coluna = selectVariavel.value;
-  const expr = buildFillColorExpr(coluna);
-  RESOLUCOES.forEach(info => {
-    map.setPaintProperty(layerId(info.res), "fill-color", expr);
+  variavelAtiva = selectVariavel.value;
+  const expr = buildFillColorExpr(variavelAtiva, paletaAtiva);
+  RESOLUCOES.forEach(info => map.setPaintProperty(layerId(info.res), "fill-color", expr));
+  atualizarLegenda(variavelAtiva, paletaAtiva);
+});
+
+const selectPaleta = document.getElementById("paleta-select");
+Object.keys(PALETAS).forEach(paleta => {
+  const opt = document.createElement("option");
+  opt.value = paleta; opt.textContent = PALETAS[paleta].label;
+  if (paleta === PALETA_INICIAL) opt.selected = true;
+  selectPaleta.appendChild(opt);
+});
+selectPaleta.addEventListener("change", () => {
+  paletaAtiva = selectPaleta.value;
+  const expr = buildFillColorExpr(variavelAtiva, paletaAtiva);
+  RESOLUCOES.forEach(info => map.setPaintProperty(layerId(info.res), "fill-color", expr));
+  atualizarLegenda(variavelAtiva, paletaAtiva);
+});
+
+const selectFundo = document.getElementById("fundo-select");
+Object.keys(BASEMAPS).forEach(fundo => {
+  const opt = document.createElement("option");
+  opt.value = fundo; opt.textContent = BASEMAPS[fundo].label;
+  if (fundo === FUNDO_INICIAL) opt.selected = true;
+  selectFundo.appendChild(opt);
+});
+selectFundo.addEventListener("change", async () => {
+  const fundo = selectFundo.value;
+  map.setStyle(BASEMAPS[fundo].style);
+  map.once("styledata", async () => {
+    adicionarCamadasHex();
+    await carregarAno(anoAtivo); // feature-state se perde junto com o estilo — recarrega
   });
-  atualizarLegenda(coluna);
+});
+
+const selectRegiao = document.getElementById("regiao-select");
+const optTodasRegioes = document.createElement("option");
+optTodasRegioes.value = "todas"; optTodasRegioes.textContent = "Todas as regiões";
+selectRegiao.appendChild(optTodasRegioes);
+Object.keys(REGIOES).forEach(chave => {
+  const opt = document.createElement("option");
+  opt.value = chave; opt.textContent = REGIOES[chave].label;
+  selectRegiao.appendChild(opt);
+});
+selectRegiao.addEventListener("change", () => {
+  regiaoAtiva = selectRegiao.value;
+  if (regiaoAtiva !== "todas" && estadoAtivo !== "todos") {
+    estadoAtivo = "todos";
+    selectEstado.value = "todos";
+  }
+  const filtro = filtroEspacialAtivo();
+  RESOLUCOES.forEach(info => map.setFilter(layerId(info.res), filtro || true));
+});
+
+const selectEstado = document.getElementById("estado-select");
+const optTodosEstados = document.createElement("option");
+optTodosEstados.value = "todos"; optTodosEstados.textContent = "Todos os estados";
+selectEstado.appendChild(optTodosEstados);
+UFS.forEach(({ sigla, nome }) => {
+  const opt = document.createElement("option");
+  opt.value = sigla; opt.textContent = `${nome} (${sigla})`;
+  selectEstado.appendChild(opt);
+});
+selectEstado.addEventListener("change", () => {
+  estadoAtivo = selectEstado.value;
+  if (estadoAtivo !== "todos" && regiaoAtiva !== "todas") {
+    regiaoAtiva = "todas";
+    selectRegiao.value = "todas";
+  }
+  const filtro = filtroEspacialAtivo();
+  RESOLUCOES.forEach(info => map.setFilter(layerId(info.res), filtro || true));
 });
 </script>
 
