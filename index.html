@@ -526,6 +526,20 @@ const map = new maplibregl.Map({
 
 map.addControl(new maplibregl.NavigationControl(), "top-right");
 
+// exposto no window só para permitir depuração via Console do navegador
+// (script type="module" tem escopo próprio, não vaza pro escopo global)
+window.map = map;
+window.debug = {
+  get conn() { return conn; },
+  get db() { return db; },
+  get estadoAtivo() { return estadoAtivo; },
+  get regiaoAtiva() { return regiaoAtiva; },
+  get anoAtivo() { return anoAtivo; },
+  get expressaoAtiva() { return expressaoAtiva; },
+  get filtroEspacialAtivo() { return filtroEspacialAtivo(); },
+  breaksPorResolucao, VARIAVEIS, REGIOES, UF_BBOX
+};
+
 function adicionarCamadasHex() {
   map.addSource("hex", {
     type: "vector",
