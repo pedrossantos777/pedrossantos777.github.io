@@ -153,6 +153,8 @@
 <script type="module">
 import * as duckdb from "https://cdn.jsdelivr.net/npm/@duckdb/duckdb-wasm@1.29.0/+esm";
 
+console.log("%c[VERSÃO DO ARQUIVO] build-diagnostico-v4", "background: #21908d; color: white; padding: 4px 8px; font-weight: bold; font-size: 14px;");
+
 // ==================================================================
 // CONFIGURAÇÃO
 // ==================================================================
@@ -633,7 +635,15 @@ function aplicarZoomEspacial() {
 
 function aplicarFiltroEspacial() {
   const filtro = filtroEspacialAtivo();
-  RESOLUCOES.forEach(info => map.setFilter(layerId(info.res), filtro || true));
+  console.log("[DIAGNÓSTICO] estadoAtivo:", estadoAtivo, "| regiaoAtiva:", regiaoAtiva);
+  console.log("[DIAGNÓSTICO] filtro calculado:", JSON.stringify(filtro));
+  RESOLUCOES.forEach(info => {
+    map.setFilter(layerId(info.res), filtro || true);
+    console.log(`[DIAGNÓSTICO] filtro aplicado em ${layerId(info.res)}:`, JSON.stringify(map.getFilter(layerId(info.res))));
+    const feats = map.querySourceFeatures("hex", { sourceLayer: sourceLayerId(info.res) });
+    console.log(`[DIAGNÓSTICO] features carregadas em ${sourceLayerId(info.res)} (na área visível):`, feats.length);
+    console.log(`[DIAGNÓSTICO] amostra de uf presentes em ${sourceLayerId(info.res)}:`, [...new Set(feats.slice(0, 200).map(f => f.properties.uf))]);
+  });
   aplicarZoomEspacial();
 }
 
@@ -780,6 +790,7 @@ UFS.forEach(({ sigla, nome }) => {
   selectEstado.appendChild(opt);
 });
 selectEstado.addEventListener("change", () => {
+  console.log("[DIAGNÓSTICO] evento change do seletor de estado disparou. Valor selecionado:", selectEstado.value);
   estadoAtivo = selectEstado.value;
   if (estadoAtivo !== "todos" && regiaoAtiva !== "todas") {
     regiaoAtiva = "todas";
