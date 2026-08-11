@@ -153,7 +153,7 @@
 <script type="module">
 import * as duckdb from "https://cdn.jsdelivr.net/npm/@duckdb/duckdb-wasm@1.29.0/+esm";
 
-console.log("%c[VERSÃO DO ARQUIVO] build-diagnostico-v4", "background: #21908d; color: white; padding: 4px 8px; font-weight: bold; font-size: 14px;");
+console.log("%c[VERSÃO DO ARQUIVO] build-uf-string-v9", "background: #21908d; color: white; padding: 4px 8px; font-weight: bold; font-size: 14px;");
 
 // ==================================================================
 // CONFIGURAÇÃO
@@ -161,6 +161,8 @@ console.log("%c[VERSÃO DO ARQUIVO] build-diagnostico-v4", "background: #21908d;
 const R2_BASE = "https://pub-a1447fee74634ed59f47ce2ba90a1fbd.r2.dev";
 const PMTILES_URL = `${R2_BASE}/geometria.pmtiles`;
 const DATA_BASE = R2_BASE; // arquivos na raiz do bucket
+const UF_LOOKUP_URL = `${DATA_BASE}/uf_lookup.parquet`;
+const UF_LOOKUP_VIRTUAL = "uf_lookup.parquet";
 
 // só existem parquets de 2013 e 2023 até agora — adicione aqui conforme
 // forem gerados novos anos
@@ -376,10 +378,23 @@ let regiaoAtiva = "todas";
 let requisicaoAtual = 0;
 let breaksPorResolucao = {}; // { 4: [min,...,max], 6: [...], 8: [...] } — cada resolução tem sua própria escala
 
-function filtroEspacialAtivo() {
-  if (estadoAtivo !== "todos") return ["==", ["upcase", ["get", "uf"]], estadoAtivo];
-  if (regiaoAtiva !== "todas") return ["in", ["upcase", ["get", "uf"]], ["literal", REGIOES[regiaoAtiva].ufs]];
-  return null;
+// filtro de área agora é resolvido inteiramente via SQL/DuckDB (join
+// com uf_lookup.parquet), não mais via `filter` de tile do MapLibre —
+// evita depender da propriedade "uf" da vector tile
+// uf já vem como VARCHAR simples (corrigido na fonte, no R, com
+// map_chr(uf, 1)) — se voltar a dar erro de tipo, confira se o
+// uf_lookup.parquet publicado é mesmo essa versão corrigida
+function ufNormalizada() {
+  return `upper(u.uf)`;
+}
+
+function condicaoSQLArea() {
+  if (estadoAtivo !== "todos") return `WHERE ${ufNormalizada()} = '${estadoAtivo}'`;
+  if (regiaoAtiva !== "todas") {
+    const lista = REGIOES[regiaoAtiva].ufs.map(uf => `'${uf}'`).join(",");
+    return `WHERE ${ufNormalizada()} IN (${lista})`;
+  }
+  return "";
 }
 
 function buildFillColorExpr(resolucao) {
@@ -434,15 +449,34 @@ async function registrarParquet(resolucao, ano) {
   return nomeVirtual;
 }
 
+let ufLookupPronto = null; // promise — garante que o lookup só é buscado uma vez
+
+function garantirUfLookup() {
+  if (!ufLookupPronto) {
+    ufLookupPronto = (async () => {
+      const resp = await fetch(UF_LOOKUP_URL, { cache: "no-store" });
+      if (!resp.ok) throw new Error(`HTTP ${resp.status} ao buscar uf_lookup.parquet`);
+      const buffer = new Uint8Array(await resp.arrayBuffer());
+      await db.registerFileBuffer(UF_LOOKUP_VIRTUAL, buffer);
+    })();
+  }
+  return ufLookupPronto;
+}
+
 async function aplicarAtributos(resolucao, ano, tokenRequisicao) {
   const sourceLayer = sourceLayerId(resolucao);
   const nomeVirtual = await registrarParquet(resolucao, ano);
+  await garantirUfLookup();
 
   if (tokenRequisicao !== requisicaoAtual) return;
 
-  const result = await conn.query(
-    `SELECT h3_address, n_firmas, qt_vinc_ativos, (${expressaoAtiva}) AS valor FROM read_parquet('${nomeVirtual}')`
-  );
+  const condicao = condicaoSQLArea();
+  const result = await conn.query(`
+    SELECT a.h3_address, a.n_firmas, a.qt_vinc_ativos, (${expressaoAtiva}) AS valor
+    FROM read_parquet('${nomeVirtual}') a
+    JOIN read_parquet('${UF_LOOKUP_VIRTUAL}') u ON a.h3_address = u.h3_address
+    ${condicao}
+  `);
   if (tokenRequisicao !== requisicaoAtual) return;
 
   map.removeFeatureState({ source: "hex", sourceLayer });
@@ -456,11 +490,17 @@ async function aplicarAtributos(resolucao, ano, tokenRequisicao) {
 
 async function calcularBreaks(resolucao, tokenRequisicao) {
   const nomeVirtual = nomeVirtualParquet(resolucao, anoAtivo);
+  const condicao = condicaoSQLArea();
+  const origem = `
+    FROM read_parquet('${nomeVirtual}') a
+    JOIN read_parquet('${UF_LOOKUP_VIRTUAL}') u ON a.h3_address = u.h3_address
+    ${condicao}
+  `;
 
   if (metodoAtivo === "quantis") {
     const probs = Array.from({ length: numClassesAtivo - 1 }, (_, i) => (i + 1) / numClassesAtivo);
     const r = await conn.query(
-      `SELECT min(${expressaoAtiva}) AS mn, max(${expressaoAtiva}) AS mx, quantile_cont((${expressaoAtiva}), [${probs.join(",")}]) AS qs FROM read_parquet('${nomeVirtual}')`
+      `SELECT min(${expressaoAtiva}) AS mn, max(${expressaoAtiva}) AS mx, quantile_cont((${expressaoAtiva}), [${probs.join(",")}]) AS qs ${origem}`
     );
     if (tokenRequisicao !== requisicaoAtual) return null;
     const row = r.toArray()[0];
@@ -469,7 +509,7 @@ async function calcularBreaks(resolucao, tokenRequisicao) {
   }
 
   if (metodoAtivo === "igual") {
-    const r = await conn.query(`SELECT min(${expressaoAtiva}) AS mn, max(${expressaoAtiva}) AS mx FROM read_parquet('${nomeVirtual}')`);
+    const r = await conn.query(`SELECT min(${expressaoAtiva}) AS mn, max(${expressaoAtiva}) AS mx ${origem}`);
     if (tokenRequisicao !== requisicaoAtual) return null;
     const { mn, mx } = r.toArray()[0];
     const passo = (Number(mx) - Number(mn)) / numClassesAtivo;
@@ -477,10 +517,30 @@ async function calcularBreaks(resolucao, tokenRequisicao) {
   }
 
   // jenks — precisa dos valores brutos no JS
-  const r = await conn.query(`SELECT (${expressaoAtiva}) AS v FROM read_parquet('${nomeVirtual}') WHERE (${expressaoAtiva}) IS NOT NULL ORDER BY v`);
+  const condicaoExtra = condicao ? `${condicao} AND (${expressaoAtiva}) IS NOT NULL` : `WHERE (${expressaoAtiva}) IS NOT NULL`;
+  const origemJenks = `FROM read_parquet('${nomeVirtual}') a JOIN read_parquet('${UF_LOOKUP_VIRTUAL}') u ON a.h3_address = u.h3_address ${condicaoExtra}`;
+  const r = await conn.query(`SELECT (${expressaoAtiva}) AS v ${origemJenks} ORDER BY v`);
   if (tokenRequisicao !== requisicaoAtual) return null;
   const valores = r.toArray().map(row => Number(row.v));
   return jenksBreaks(valores, numClassesAtivo);
+}
+
+// garante sequência estritamente crescente — necessário para a expressão
+// "step" do MapLibre, que rejeita breaks duplicados/iguais. Isso pode
+// acontecer com áreas pequenas (poucos hexágonos, valores repetidos)
+function sanitizarBreaks(breaks) {
+  const resultado = [breaks[0]];
+  for (let i = 1; i < breaks.length; i++) {
+    const anterior = resultado[resultado.length - 1];
+    let atual = breaks[i];
+    if (atual <= anterior) {
+      // nudge mínimo para manter estritamente crescente sem distorcer a escala
+      const epsilon = Math.max(Math.abs(anterior) * 1e-9, 1e-9);
+      atual = anterior + epsilon;
+    }
+    resultado.push(atual);
+  }
+  return resultado;
 }
 
 async function recalcularClassificacao() {
@@ -491,7 +551,7 @@ async function recalcularClassificacao() {
       RESOLUCOES.map(async info => [info.res, await calcularBreaks(info.res, token)])
     );
     if (token !== requisicaoAtual) return;
-    resultados.forEach(([res, breaks]) => { if (breaks) breaksPorResolucao[res] = breaks; });
+    resultados.forEach(([res, breaks]) => { if (breaks) breaksPorResolucao[res] = sanitizarBreaks(breaks); });
     repintarCamadas();
     setStatus("", "");
   } catch (err) {
@@ -538,7 +598,7 @@ window.debug = {
   get regiaoAtiva() { return regiaoAtiva; },
   get anoAtivo() { return anoAtivo; },
   get expressaoAtiva() { return expressaoAtiva; },
-  get filtroEspacialAtivo() { return filtroEspacialAtivo(); },
+  get condicaoSQLArea() { return condicaoSQLArea(); },
   breaksPorResolucao, VARIAVEIS, REGIOES, UF_BBOX
 };
 
@@ -551,7 +611,6 @@ function adicionarCamadasHex() {
 
   RESOLUCOES.forEach(info => {
     const id = layerId(info.res);
-    const filtroEspacial = filtroEspacialAtivo();
 
     map.addLayer({
       id: id,
@@ -560,7 +619,6 @@ function adicionarCamadasHex() {
       "source-layer": sourceLayerId(info.res),
       minzoom: info.minzoom,
       maxzoom: info.maxzoom,
-      filter: filtroEspacial || true,
       paint: {
         "fill-color": breaksPorResolucao[info.res] ? buildFillColorExpr(info.res) : "#cccccc",
         "fill-opacity": breaksPorResolucao[info.res] ? buildFillOpacityExpr() : 0.5,
@@ -633,18 +691,9 @@ function aplicarZoomEspacial() {
   }
 }
 
-function aplicarFiltroEspacial() {
-  const filtro = filtroEspacialAtivo();
-  console.log("[DIAGNÓSTICO] estadoAtivo:", estadoAtivo, "| regiaoAtiva:", regiaoAtiva);
-  console.log("[DIAGNÓSTICO] filtro calculado:", JSON.stringify(filtro));
-  RESOLUCOES.forEach(info => {
-    map.setFilter(layerId(info.res), filtro || true);
-    console.log(`[DIAGNÓSTICO] filtro aplicado em ${layerId(info.res)}:`, JSON.stringify(map.getFilter(layerId(info.res))));
-    const feats = map.querySourceFeatures("hex", { sourceLayer: sourceLayerId(info.res) });
-    console.log(`[DIAGNÓSTICO] features carregadas em ${sourceLayerId(info.res)} (na área visível):`, feats.length);
-    console.log(`[DIAGNÓSTICO] amostra de uf presentes em ${sourceLayerId(info.res)}:`, [...new Set(feats.slice(0, 200).map(f => f.properties.uf))]);
-  });
+function aplicarFiltroArea() {
   aplicarZoomEspacial();
+  carregarAno(anoAtivo); // recarrega feature-state com o novo filtro embutido na query SQL
 }
 
 // ==================================================================
@@ -654,9 +703,14 @@ async function exportarCSV() {
   setStatus("Gerando CSV…", "loading");
   try {
     const nomeVirtual = nomeVirtualParquet(RESOLUCAO_AMOSTRA, anoAtivo);
-    const r = await conn.query(
-      `SELECT h3_address, n_firmas, qt_vinc_ativos, (${expressaoAtiva}) AS valor FROM read_parquet('${nomeVirtual}')`
-    );
+    await garantirUfLookup();
+    const condicao = condicaoSQLArea();
+    const r = await conn.query(`
+      SELECT a.h3_address, a.n_firmas, a.qt_vinc_ativos, (${expressaoAtiva}) AS valor
+      FROM read_parquet('${nomeVirtual}') a
+      JOIN read_parquet('${UF_LOOKUP_VIRTUAL}') u ON a.h3_address = u.h3_address
+      ${condicao}
+    `);
     const linhas = r.toArray();
     const header = "h3_address,n_firmas,qt_vinc_ativos,valor";
     const corpo = linhas.map(row => `${row.h3_address},${row.n_firmas},${row.qt_vinc_ativos},${row.valor}`).join("\n");
@@ -777,7 +831,7 @@ selectRegiao.addEventListener("change", () => {
     estadoAtivo = "todos";
     selectEstado.value = "todos";
   }
-  aplicarFiltroEspacial();
+  aplicarFiltroArea();
 });
 
 const selectEstado = document.getElementById("estado-select");
@@ -796,7 +850,7 @@ selectEstado.addEventListener("change", () => {
     regiaoAtiva = "todas";
     selectRegiao.value = "todas";
   }
-  aplicarFiltroEspacial();
+  aplicarFiltroArea();
 });
 
 document.getElementById("export-btn").addEventListener("click", exportarCSV);
