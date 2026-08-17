@@ -153,7 +153,7 @@
 <script type="module">
 import * as duckdb from "https://cdn.jsdelivr.net/npm/@duckdb/duckdb-wasm@1.29.0/+esm";
 
-console.log("%c[VERSÃO DO ARQUIVO] build-uf-string-v9", "background: #21908d; color: white; padding: 4px 8px; font-weight: bold; font-size: 14px;");
+console.log("%c[VERSÃO DO ARQUIVO] build-semijoin-v10", "background: #21908d; color: white; padding: 4px 8px; font-weight: bold; font-size: 14px;");
 
 // ==================================================================
 // CONFIGURAÇÃO
@@ -381,18 +381,16 @@ let breaksPorResolucao = {}; // { 4: [min,...,max], 6: [...], 8: [...] } — cad
 // filtro de área agora é resolvido inteiramente via SQL/DuckDB (join
 // com uf_lookup.parquet), não mais via `filter` de tile do MapLibre —
 // evita depender da propriedade "uf" da vector tile
-// uf já vem como VARCHAR simples (corrigido na fonte, no R, com
-// map_chr(uf, 1)) — se voltar a dar erro de tipo, confira se o
-// uf_lookup.parquet publicado é mesmo essa versão corrigida
-function ufNormalizada() {
-  return `upper(u.uf)`;
-}
-
+// filtro de área via subquery de existência (não JOIN) — evita duplicar
+// hexágonos que intersectam mais de uma UF, e retorna vazio (sem custo
+// nenhum de lookup) quando não há filtro de área ativo
 function condicaoSQLArea() {
-  if (estadoAtivo !== "todos") return `WHERE ${ufNormalizada()} = '${estadoAtivo}'`;
+  if (estadoAtivo !== "todos") {
+    return `WHERE a.h3_address IN (SELECT h3_address FROM read_parquet('${UF_LOOKUP_VIRTUAL}') WHERE upper(uf) = '${estadoAtivo}')`;
+  }
   if (regiaoAtiva !== "todas") {
     const lista = REGIOES[regiaoAtiva].ufs.map(uf => `'${uf}'`).join(",");
-    return `WHERE ${ufNormalizada()} IN (${lista})`;
+    return `WHERE a.h3_address IN (SELECT h3_address FROM read_parquet('${UF_LOOKUP_VIRTUAL}') WHERE upper(uf) IN (${lista}))`;
   }
   return "";
 }
@@ -466,15 +464,14 @@ function garantirUfLookup() {
 async function aplicarAtributos(resolucao, ano, tokenRequisicao) {
   const sourceLayer = sourceLayerId(resolucao);
   const nomeVirtual = await registrarParquet(resolucao, ano);
-  await garantirUfLookup();
+  const condicao = condicaoSQLArea();
+  if (condicao) await garantirUfLookup(); // só busca o lookup se houver filtro de área
 
   if (tokenRequisicao !== requisicaoAtual) return;
 
-  const condicao = condicaoSQLArea();
   const result = await conn.query(`
     SELECT a.h3_address, a.n_firmas, a.qt_vinc_ativos, (${expressaoAtiva}) AS valor
     FROM read_parquet('${nomeVirtual}') a
-    JOIN read_parquet('${UF_LOOKUP_VIRTUAL}') u ON a.h3_address = u.h3_address
     ${condicao}
   `);
   if (tokenRequisicao !== requisicaoAtual) return;
@@ -491,11 +488,8 @@ async function aplicarAtributos(resolucao, ano, tokenRequisicao) {
 async function calcularBreaks(resolucao, tokenRequisicao) {
   const nomeVirtual = nomeVirtualParquet(resolucao, anoAtivo);
   const condicao = condicaoSQLArea();
-  const origem = `
-    FROM read_parquet('${nomeVirtual}') a
-    JOIN read_parquet('${UF_LOOKUP_VIRTUAL}') u ON a.h3_address = u.h3_address
-    ${condicao}
-  `;
+  if (condicao) await garantirUfLookup();
+  const origem = `FROM read_parquet('${nomeVirtual}') a ${condicao}`;
 
   if (metodoAtivo === "quantis") {
     const probs = Array.from({ length: numClassesAtivo - 1 }, (_, i) => (i + 1) / numClassesAtivo);
@@ -518,7 +512,7 @@ async function calcularBreaks(resolucao, tokenRequisicao) {
 
   // jenks — precisa dos valores brutos no JS
   const condicaoExtra = condicao ? `${condicao} AND (${expressaoAtiva}) IS NOT NULL` : `WHERE (${expressaoAtiva}) IS NOT NULL`;
-  const origemJenks = `FROM read_parquet('${nomeVirtual}') a JOIN read_parquet('${UF_LOOKUP_VIRTUAL}') u ON a.h3_address = u.h3_address ${condicaoExtra}`;
+  const origemJenks = `FROM read_parquet('${nomeVirtual}') a ${condicaoExtra}`;
   const r = await conn.query(`SELECT (${expressaoAtiva}) AS v ${origemJenks} ORDER BY v`);
   if (tokenRequisicao !== requisicaoAtual) return null;
   const valores = r.toArray().map(row => Number(row.v));
@@ -703,12 +697,11 @@ async function exportarCSV() {
   setStatus("Gerando CSV…", "loading");
   try {
     const nomeVirtual = nomeVirtualParquet(RESOLUCAO_AMOSTRA, anoAtivo);
-    await garantirUfLookup();
     const condicao = condicaoSQLArea();
+    if (condicao) await garantirUfLookup();
     const r = await conn.query(`
       SELECT a.h3_address, a.n_firmas, a.qt_vinc_ativos, (${expressaoAtiva}) AS valor
       FROM read_parquet('${nomeVirtual}') a
-      JOIN read_parquet('${UF_LOOKUP_VIRTUAL}') u ON a.h3_address = u.h3_address
       ${condicao}
     `);
     const linhas = r.toArray();
