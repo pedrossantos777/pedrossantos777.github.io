@@ -138,7 +138,9 @@
   <label for="estado-select">Estado (UF)</label>
   <select id="estado-select"></select>
 
-  <button id="export-btn">Exportar CSV (resolução 6)</button>
+  <label for="export-resolucao">Exportar CSV — resolução</label>
+  <select id="export-resolucao"></select>
+  <button id="export-btn">Exportar CSV</button>
 
   <div id="status"></div>
 </div>
@@ -153,7 +155,7 @@
 <script type="module">
 import * as duckdb from "https://cdn.jsdelivr.net/npm/@duckdb/duckdb-wasm@1.29.0/+esm";
 
-console.log("%c[VERSÃO DO ARQUIVO] build-semijoin-v10", "background: #21908d; color: white; padding: 4px 8px; font-weight: bold; font-size: 14px;");
+console.log("%c[VERSÃO DO ARQUIVO] build-export-dinamico-v11", "background: #21908d; color: white; padding: 4px 8px; font-weight: bold; font-size: 14px;");
 
 // ==================================================================
 // CONFIGURAÇÃO
@@ -177,7 +179,8 @@ const RESOLUCOES = [
 // resolução usada como amostra para calcular quebras de classificação
 // (não dá pra usar as 3 ao mesmo tempo — os valores mudam de escala
 // conforme o tamanho do hexágono)
-const RESOLUCAO_AMOSTRA = 6;
+// RESOLUCAO_AMOSTRA removida — exportação agora lê a resolução escolhida
+// no seletor #export-resolucao, populado dinamicamente a partir de RESOLUCOES
 
 const PALETAS = {
   viridis:        { label: "Viridis",                cores: ["#440154", "#3b528b", "#21908d", "#5dc863", "#fde725"] },
@@ -694,9 +697,10 @@ function aplicarFiltroArea() {
 // Exportar CSV
 // ==================================================================
 async function exportarCSV() {
-  setStatus("Gerando CSV…", "loading");
+  const resolucaoExport = parseInt(document.getElementById("export-resolucao").value, 10);
+  setStatus(`Gerando CSV (resolução ${resolucaoExport})…`, "loading");
   try {
-    const nomeVirtual = nomeVirtualParquet(RESOLUCAO_AMOSTRA, anoAtivo);
+    const nomeVirtual = nomeVirtualParquet(resolucaoExport, anoAtivo);
     const condicao = condicaoSQLArea();
     if (condicao) await garantirUfLookup();
     const r = await conn.query(`
@@ -710,7 +714,7 @@ async function exportarCSV() {
     const blob = new Blob([header + "\n" + corpo], { type: "text/csv;charset=utf-8;" });
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a");
-    a.href = url; a.download = `hex_r0${RESOLUCAO_AMOSTRA}_${anoAtivo}.csv`;
+    a.href = url; a.download = `hex_r0${resolucaoExport}_${anoAtivo}.csv`;
     document.body.appendChild(a); a.click(); document.body.removeChild(a);
     URL.revokeObjectURL(url);
     setStatus("", "");
@@ -845,6 +849,18 @@ selectEstado.addEventListener("change", () => {
   }
   aplicarFiltroArea();
 });
+
+// seletor de resolução de exportação — gerado a partir de RESOLUCOES,
+// então novas resoluções adicionadas ali aparecem aqui automaticamente
+const selectExportResolucao = document.getElementById("export-resolucao");
+RESOLUCOES.forEach(info => {
+  const opt = document.createElement("option");
+  opt.value = info.res;
+  opt.textContent = `Resolução ${info.res}`;
+  selectExportResolucao.appendChild(opt);
+});
+// padrão: resolução do meio da lista (mantém o comportamento anterior de default = 6)
+selectExportResolucao.value = RESOLUCOES[Math.floor(RESOLUCOES.length / 2)].res;
 
 document.getElementById("export-btn").addEventListener("click", exportarCSV);
 </script>
