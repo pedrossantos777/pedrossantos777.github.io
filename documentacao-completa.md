@@ -1,4 +1,4 @@
-# Dashboard RAIS agregada em H3 — Brasil
+# Mapa interativo RAIS agregada em H3 — Brasil
 
 > **Este é o documento de referência completo.** Para uma visão rápida
 > da arquitetura sem entrar em detalhe de implementação, veja o
