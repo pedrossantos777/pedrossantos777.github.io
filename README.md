@@ -1,11 +1,11 @@
 # pedrossantos777.github.io
-# Dashboard RAIS agregada em H3 — Brasil
+# Mapa Interativo RAIS agregada em H3 — Brasil
 
 Mapa interativo de firmas e vínculos empregatícios da RAIS, agregados
 em grade hexagonal H3. Roda **sem servidor** — depois de publicado,
 tudo acontece dentro do navegador de quem está usando o mapa.
 
-📖 Documentação completa (para quem for mexer no código): [`docs/documentacao-completa.md`](docs/documentacao-completa.md)
+📖 Documentação completa (para quem for mexer no código): [`documentacao-completa.md`](https://github.com/pedrossantos777/pedrossantos777.github.io/blob/main/documentacao-completa.md)
 🖼️ Fluxograma visual do workflow: [`docs/fluxograma-workflow.svg`](docs/fluxograma-workflow.svg)
 
 ---
@@ -66,4 +66,4 @@ python -m http.server 8000
 
 Passo a passo detalhado, configuração de CORS, estrutura das funções,
 erros comuns e decisões de arquitetura: veja a
-[documentação completa](docs/documentacao-completa.md).
+[documentação completa](https://github.com/pedrossantos777/pedrossantos777.github.io/blob/main/documentacao-completa.md).
