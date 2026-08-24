@@ -10,25 +10,23 @@ tudo acontece dentro do navegador de quem está usando o mapa.
 
 ---
 
-## A ideia em uma frase
-
 O mapa separa **a forma dos hexágonos** (que nunca muda) dos
-**números dentro de cada hexágono** (que mudam a cada ano) — e um
+**valores dentro de cada hexágono** (que mudam a cada ano) — e um
 motor de banco de dados rodando no próprio navegador junta os dois na
 hora, sem precisar de um servidor no meio.
 
 ## As três camadas
 
 ```
-┌─────────────────────┐      ┌──────────────────────┐      ┌───────────────────────────┐
-│   1. Pipeline em R   │  ──► │  2. Armazenamento     │  ──► │  3. Navegador do usuário   │
-│                      │      │     (Cloudflare R2)   │      │                            │
-│  Lê a RAIS e gera:   │      │                        │      │  MapLibre desenha os       │
-│  • geometria.pmtiles │      │  Arquivos estáticos,   │      │  hexágonos; DuckDB-WASM    │
-│  • parquets por ano  │      │  servidos com suporte  │      │  consulta os atributos e   │
-│  • uf_lookup.parquet │      │  a leitura parcial     │      │  "cola" o valor certo em   │
-│                      │      │  (Range) e CORS        │      │  cada um                   │
-└─────────────────────┘      └──────────────────────┘      └───────────────────────────┘
+┌──────────────────────┐      ┌────────────────────────┐       ┌────────────────────────────┐
+│   1. Pipeline em R   │  ──► │  2. Armazenamento      │  ──►  │  3. Navegador do usuário   │
+│                      │      │     (Cloudflare R2)    │       │                            │
+│  Lê a RAIS e gera:   │      │                        │       │  MapLibre desenha os       │
+│  • geometria.pmtiles │      │  Arquivos estáticos,   │       │  hexágonos; DuckDB-WASM    │
+│  • parquets por ano  │      │  servidos com suporte  │       │  consulta os atributos e   │
+│  • uf_lookup.parquet │      │  a leitura parcial     │       │  publica o valor certo em  │
+│                      │      │  (Range) e CORS        │       │  cada hexágono             │
+└──────────────────────┘      └────────────────────────┘       └────────────────────────────┘
 ```
 
 - **Camada 1 — Pipeline em R (`targets`)**: roda uma vez (ou sempre
