@@ -424,8 +424,8 @@ configurável (4 a 8):
 - **Intervalos iguais** — `min`/`max` do DuckDB, dividido em partes
   iguais em JS.
 - **Jenks (natural breaks)** — não existe função nativa para isso em
-  SQL, então o DuckDB só traz os valores brutos, e um algoritmo Jenks
-  clássico roda em JavaScript (com amostragem automática acima de 2000
+  SQL, então o DuckDB só traz os valores brutos, e um **algoritmo Jenks
+  clássico roda em JavaScript** (com amostragem automática acima de 2000
   pontos, para não travar o navegador em bases grandes).
 
 Os breaks são calculados **separadamente por resolução** (4, 6 e 8),
