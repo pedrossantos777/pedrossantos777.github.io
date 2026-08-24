@@ -43,14 +43,13 @@ veja o fluxograma em [`fluxograma-workflow.svg`](fluxograma-workflow.svg).
 A ideia central do projeto é separar **duas coisas que mudam em
 velocidades diferentes**:
 
-- **Geometria dos hexágonos** — a forma de cada hexágono H3 nunca muda.
-  É gerada **uma única vez** e vira um arquivo `geometria.pmtiles`.
+- **Geometria dos hexágonos** é gerada **uma única vez** e vira um arquivo `geometria.pmtiles`.
 - **Atributos por ano** (quantidade de firmas, vínculos ativos) — mudam
   a cada ano de dado novo. Ficam em **arquivos `.parquet` pequenos e
   separados**, um por combinação de resolução × ano.
 
 No navegador, um motor de banco de dados (**DuckDB-WASM**) lê esses
-`.parquet` sob demanda e "cola" os valores certos em cada hexágono já
+`.parquet` sob demanda e publica os valores certos em cada hexágono já
 desenhado, via um mecanismo do MapLibre chamado `feature-state`. Essa
 separação é o que permite trocar de ano, aplicar uma fórmula SQL
 customizada, ou reclassificar a legenda **sem nunca regenerar a
