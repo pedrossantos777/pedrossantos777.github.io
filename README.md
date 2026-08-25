@@ -1,4 +1,4 @@
-# pedrossantos777.github.io
+
 # Mapa Interativo RAIS agregada em H3 — Brasil
 
 Mapa interativo de firmas e vínculos empregatícios da RAIS, agregados
