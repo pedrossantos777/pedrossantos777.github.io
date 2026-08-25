@@ -2,24 +2,32 @@
 # Mapa Interativo RAIS agregada em H3 — Brasil
 
 Mapa interativo de firmas e vínculos empregatícios da RAIS, agregados
-em grade hexagonal H3. Roda **sem servidor** — depois de publicado,
-tudo acontece dentro do navegador de quem está usando o mapa.
+em grade hexagonal H3. 
 
 📖 Documentação completa (para quem for mexer no código): [`documentacao-completa.md`](https://github.com/pedrossantos777/pedrossantos777.github.io/blob/main/documentacao-completa.md)
 🖼️ Fluxograma visual do workflow: [`docs/fluxograma-workflow.svg`](docs/fluxograma-workflow.svg)
 
 ---
+## Como funciona
 
-O mapa separa **a forma dos hexágonos** (que nunca muda) dos
-**valores dentro de cada hexágono** (que mudam a cada ano) — e um
+O mapa é carregado com os hexagonos e os arquivos que contém os dados de empregos e de firmas separadamente, 
+e dentro do navegador eles são conectados por quem está utilizando o mapa.
+
+O mapa separa **a forma dos hexágonos** dos
+**valores dentro de cada hexágono** — e um
 motor de banco de dados rodando no próprio navegador junta os dois na
 hora, sem precisar de um servidor no meio.
+
+Os arquivos .tile possuem os hexágonos e os arquivos em parquet para cada resolução e ano são mantidos separadamente e unificados via
+DUCK-DB WASM pelo navegador do prórprio usuário. Essa arquitetura permite que os arquivos gerados sejam mais leves
+e que o navegador possa executar os códigos sem sobrecarregar a máquina.
+O modelo também permite que o prório usuário possa realizar suas buscas utilizando SQL no próprio site.
 
 ## As três camadas
 
 ```
 ┌──────────────────────┐      ┌────────────────────────┐       ┌────────────────────────────┐
-│   1. Pipeline em R   │  ──► │  2. Armazenamento      │  ──►  │  3. Navegador do usuário   │
+│   1. Pipeline        │  ──► │  2. Armazenamento      │  ──►  │  3. Navegador do usuário   │
 │                      │      │     (Cloudflare R2)    │       │                            │
 │  Lê a RAIS e gera:   │      │                        │       │  MapLibre desenha os       │
 │  • geometria.pmtiles │      │  Arquivos estáticos,   │       │  hexágonos; DuckDB-WASM    │
