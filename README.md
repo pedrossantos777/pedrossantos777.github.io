@@ -37,9 +37,9 @@ O modelo também permite que o prório usuário possa realizar suas buscas utili
 └──────────────────────┘      └────────────────────────┘       └────────────────────────────┘
 ```
 
-- **Camada 1 — Pipeline em R (`targets`)**: roda uma vez (ou sempre
-  que há dado novo), gera os arquivos, não fica "ligado" depois.
-- **Camada 2 — Cloudflare R2**: só guarda arquivos. Não roda código
+- **Camada 1 — Pipeline**: roda uma vez (ou sempre
+  que há dado novo) e gera os arquivos.
+- **Camada 2 — Cloudflare R2**: guarda arquivos. Não roda código
   nenhum.
 - **Camada 3 — Navegador**: é onde a interatividade acontece de
   verdade — trocar de ano, aplicar uma fórmula, reclassificar a
@@ -54,6 +54,15 @@ de novo a cada ano seria redundante (e deixaria o arquivo do mapa cada
 vez maior). Separando os dois, a geometria é gerada **uma vez só**, e
 trocar de ano vira só buscar um arquivo pequeno novo.
 
+
+## Níveis de Zoom
+
+Inicialmente o mapa interativo permite que sejam observados os dados de empregos pelos 
+hexágonos de nível 4, 6 e 8, para todo o Brasil, separado por UF e por Região.
+Ao interagir com o mapa dando zoom, o próprio navegador carrega as tiles que compõema tela exibida, o que
+permite que o navegador não faça consultas desnecessárias e force o processamento da própria máquina.
+
+ 
 ## Como rodar (resumo)
 
 ```r
