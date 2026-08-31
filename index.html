@@ -204,11 +204,17 @@ console.log("%c[VERSÃO DO ARQUIVO] build-legenda-direita-v14", "background: #21
 // ==================================================================
 // CONFIGURAÇÃO
 // ==================================================================
-const R2_BASE = "https://pub-a1447fee74634ed59f47ce2ba90a1fbd.r2.dev";
-const PMTILES_URL = `${R2_BASE}/geometria.pmtiles`;
+//const R2_BASE = "https://pub-a1447fee74634ed59f47ce2ba90a1fbd.r2.dev"; 
+const R2_BASE = "https://pub-a1447fee74634ed59f47ce2ba90a1fbd.r2.dev" //geometria_targets.pmtiles
+//const PMTILES_URL = `${R2_BASE}/geometria.pmtiles`;
+const PMTILES_URL = `${R2_BASE}/geometria_targets.pmtiles`;  
 const DATA_BASE = R2_BASE; // arquivos na raiz do bucket
 const UF_LOOKUP_URL = `${DATA_BASE}/uf_lookup.parquet`;
 const UF_LOOKUP_VIRTUAL = "uf_lookup.parquet";
+//const UF_LOOKUP_URL = `${DATA_BASE}/uf_lookup_targets.parquet`;
+//const UF_LOOKUP_VIRTUAL = "uf_lookup_targets.parquet";
+
+  
 
 // só existem parquets de 2013 e 2023 até agora — adicione aqui conforme
 // forem gerados novos anos
