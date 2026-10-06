@@ -1,0 +1,169 @@
+- One or more packages recorded in the lockfile are not installed.
+- Use `]8;;x-r-run:renv::status()renv::status()]8;;` for more details.
+A (original)  : data/otimizacao/rais_rj_censurada_barreira5.parquet  | 24697 linhas
+B (otimizada) : data/otimizacao/rais_rj_censurada_barreira5_otimizada.parquet  | 24693 linhas
+
+== 1. ARQUIVO (bit a bit) ==
+                                       arquivo  bytes
+           rais_rj_censurada_barreira5.parquet 220236
+ rais_rj_censurada_barreira5_otimizada.parquet 220097
+                              md5
+ 2bd9c63638782bb6da42761b0a2f7469
+ cbc6fbfca5ec033d9a868e9e48acb7eb
+                                                           sha256
+ 45cfe575032f059c057b8219006b3431df9d1be20d3ebb8ea281ae3ddfb1eaf7
+ 232ba5e63cb566b82352027957cbd462768b1c7a4e9d34d508d4a87c855a6453
+Arquivos byte-identicos? FALSE
+
+== 2. ESQUEMA ==
+A:
+Schema
+year: double
+abbrev_state: string
+code_muni: double
+code_immediate: double
+h3_res: int32
+h3_address: string
+F001: int32
+T001: int32
+
+See $metadata for additional Schema metadata
+B:
+Schema
+year: double
+abbrev_state: string
+code_muni: double
+code_immediate: double
+h3_res: int32
+h3_address: string
+F001: int32
+T001: int32
+
+See $metadata for additional Schema metadata
+Esquemas iguais? TRUE
+
+== 3. CONTEUDO (global) ==
+                        [,1]
+linhas_A               24697
+linhas_B               24693
+chaves_distintas       24701
+linhas_so_em_A             8
+linhas_so_em_B             4
+linhas_em_ambas        24689
+ambas_F001_iguais      24256
+ambas_F001_diferem       433
+ambas_T001_iguais      24254
+ambas_T001_diferem       435
+sum_F001_A           5804740
+sum_F001_B           3914438
+sum_T001_A         100340190
+sum_T001_B          68827387
+max_abs_dif_F001      555090
+max_abs_dif_T001    10494150
+
+== 3. CONTEUDO (por branch) ==
+ year h3_res linhas_A linhas_B so_A so_B F001_diferem T001_diferem sum_F001_A
+ 2013      2       10       10    0    0           10           10     946331
+ 2013      3       18       18    1    1           13           13     403634
+ 2013      4       55       54    2    1           29           29     303790
+ 2013      5      203      200    3    0           39           39     253664
+ 2013      6      582      581    1    0            9            9     242573
+ 2013      7     1282     1283    0    1           11           11     241233
+ 2013      8     3160     3160    0    0           18           18     239015
+ 2013      9     6692     6692    0    0           98          100     230999
+ 2023      2        9        9    0    0            9            9     967105
+ 2023      3       17       17    0    0           13           13     416990
+ 2023      4       52       52    0    0           26           26     309701
+ 2023      5      198      198    0    0           34           34     262497
+ 2023      6      593      593    0    0            6            6     250910
+ 2023      7     1345     1345    0    0            6            6     249614
+ 2023      8     3367     3367    0    0           22           22     247445
+ 2023      9     7114     7114    1    1           90           90     239239
+ sum_F001_B dif_sum_F001 dif_sum_F001_pct max_abs_dif_F001
+     242674       703657     289.95978144           543129
+     242673       160961      66.32835132            29582
+     242670        61120      25.18646722            18288
+     242647        11017       4.54034049             4498
+     242321          252       0.10399429              110
+     241197           36       0.01492556               18
+     239015            0       0.00000000                4
+     230999            0       0.00000000               10
+     250863       716242     285.51121528           555090
+     250862       166128      66.22286357            33096
+     250858        58843      23.45669662            19202
+     250831        11666       4.65094027             4138
+     250569          341       0.13609026              190
+     249575           39       0.01562657               17
+     247445            0       0.00000000                8
+     239239            0       0.00000000                8
+
+== 3. CONTEUDO (top-20 divergencias de F001) ==
+ year abbrev_state code_muni code_immediate h3_res      h3_address F001_A
+ 2023           RJ   3304557           3301      2 82a8a7fffffffff 740120
+ 2013           RJ   3304557           3301      2 82a8a7fffffffff 724172
+ 2023           RJ   3300308           3302      2 82a8a7fffffffff  61188
+ 2013           RJ   3300308           3302      2 82a8a7fffffffff  58200
+ 2023           RJ   3303906           3303      2 82a8a7fffffffff  54380
+ 2013           RJ   3303906           3303      2 82a8a7fffffffff  51376
+ 2023           RJ   3300704           3305      2 82a8a7fffffffff  48456
+ 2023           RJ   3305505           3301      3 83a8a2fffffffff  49644
+ 2023           RJ   3303500           3301      3 83a8a3fffffffff  46410
+ 2013           RJ   3300704           3305      2 82a8a7fffffffff  39488
+ 2013           RJ   3304904           3301      3 83a8a2fffffffff  44373
+ 2023           RJ   3303906           3303      3 83a8a3fffffffff  39321
+ 2013           RJ   3303500           3301      3 83a8a3fffffffff  38217
+ 2013           RJ   3303906           3303      3 83a8a3fffffffff  37335
+ 2023           RJ   3300704           3305      3 83a8a2fffffffff  36342
+ 2013           RJ   3300704           3305      3 83a8a2fffffffff  29616
+ 2023           RJ   3303906           3303      4 84a8a3dffffffff  28803
+ 2013           RJ   3303906           3303      4 84a8a3dffffffff  27432
+ 2013           RJ   3302205           3304      2 82a887fffffffff  20910
+ 2023           RJ   3302205           3304      2 82a887fffffffff  20004
+ F001_B dif_F001   T001_A  T001_B dif_T001
+ 185030   555090 13992200 3498050 10494150
+ 181043   543129 13813304 3453326 10359978
+  15297    45891   828688  207172   621516
+  14550    43650   854304  213576   640728
+  13595    40785   595288  148822   446466
+  12844    38532   592504  148126   444378
+  12114    36342   583248  145812   437436
+  16548    33096   698610  232870   465740
+  15470    30940   749745  249915   499830
+   9872    29616   439604  109901   329703
+  14791    29582   654846  218282   436564
+  13107    26214   437634  145878   291756
+  12739    25478   687066  229022   458044
+  12445    24890   436146  145382   290764
+  12114    24228   437436  145812   291624
+   9872    19744   329703  109901   219802
+   9601    19202   314838  104946   209892
+   9144    18288   303258  101086   202172
+   6970    13940   217428   72476   144952
+   6668    13336   239889   79963   159926
+
+== 4. VALOR A VALOR (por resolucao) ==
+ h3_res chaves_alinhadas F001_identico T001_identico celulas_dif_F001
+      2             TRUE         FALSE         FALSE               19
+      3            FALSE            NA            NA               NA
+      4            FALSE            NA            NA               NA
+      5            FALSE            NA            NA               NA
+      6            FALSE            NA            NA               NA
+      7            FALSE            NA            NA               NA
+      8             TRUE         FALSE         FALSE               40
+      9            FALSE            NA            NA               NA
+ celulas_dif_T001
+               19
+               NA
+               NA
+               NA
+               NA
+               NA
+               40
+               NA
+
+== 5. DUMP CANONICO (CSV ordenado) ==
+SHA-256 A: 2b42015c628da1a4863a17144c4ea9f6cc43e1697d7011eded6b3c688cb5f955
+SHA-256 B: 861bbc4685a6c208c45fc92f2db0f2c7b9077aeaa2486ce7d76480731f0cc6dd
+Conteudo 100% identico? FALSE
+
+[ok] artefatos de comparacao salvos em data/otimizacao/

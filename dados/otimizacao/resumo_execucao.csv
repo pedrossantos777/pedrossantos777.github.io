@@ -1,0 +1,2 @@
+"parquet","uf","barreira","linhas_rj_entrada","linhas_rj_saida","n_branches","t_load_s","t_total_wall_s","t_soma_vizinhos_s","t_soma_censura_s","share_censura_medio","R_version","data_execucao"
+"data/rais_test_20260727.parquet","RJ",5,34940,24697,16,16.62,229.65,7.01999999999999,216.66,0.952655217248717,"R version 4.5.2 (2025-10-31 ucrt)","2026-09-01 17:51:41.492872"

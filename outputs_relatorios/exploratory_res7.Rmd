@@ -1,0 +1,716 @@
+---
+title: "Análise exploratória do Estado do Rio de Janeiro"
+author: "Pedro Santos"
+subtitle: Percepção sobre como os dados se comportam após a aplicação da função de
+  censura dos dados aos hexagonos de resolução 7
+output:
+  html_document: default
+  self_contained: true
+  pdf_document: default
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE, warning = FALSE, message = FALSE)
+```
+
+
+```{r cars}
+library(mapgl)
+library(htmlwidgets)
+library(tidyverse)
+library(ipeadatalake)
+library(geobr)
+library(sf)
+library(mapview)
+library(leafgl)
+library(dplyr)
+library(viridisLite)
+library(viridis)
+library(geoarrow)
+library(viridisLite) 
+library(skimr)
+
+source("../R/agregar_escolas.R")
+source("../R/censura_funcao.R")
+source("../R/encontrar_vizinho.R")
+source("../R/escolas_por_h3.R")
+mapview::mapviewOptions(platform = 'leafgl')
+
+
+```
+
+
+```{r}
+#dataset do rio de janeiro na resolução 7
+df <- arrow::open_dataset("../data/rio_grade_07_rais2019 1.parquet") |> 
+  sf::st_as_sf()
+#encontrar os vizinhos de cada h3
+df_vizinhos <- encontrar_vizinho(tabela_raw = df, id_hex = 'h3_address')
+
+#df aplicado aos dados de censura - função retorna colunas de nome "contagem_firmas" e "contagem_empregos"
+df_cens <- censura(tabela_raw = df, tabela_vizinhos = df_vizinhos, barreira = 3, id_hex = 'h3_address', col_name = 'qt_firmas', col_name2 = "qt_empregos")
+
+
+#salva em arquivo o df_censurado
+#arrow::write_parquet(df_cens, './rio_grade_07_censurado_rais2019.parquet')
+# summary(df$qt_firmas)
+# summary(df_cens$contagem)
+
+# density(df$qt_firmas) |> plot()
+# density(df_cens$contagem) |> plot()
+
+#df_temporário para testar a aplicação em mapview
+temp <- df_cens |> sf::st_drop_geometry()
+
+#união entre as tabelas temp (censurada sem geometria e as tabelas do rj)
+aaa <- left_join(df, temp, by = c('h3_address' = 'id_max_vizinho'))
+#salva em arquivo o df_censurado
+#arrow::write_parquet(df_cens, './rio_grade_07_censurado_rais2019.parquet')
+
+#criação das colunas com a diferença entre o dataset com firmas censuradas e as firmas anteriores  
+#renomeação das colunas em firmas/empregos antes e depois
+aaa <- aaa |> 
+    rename(qt_firmas_antes = qt_firmas,
+           qt_empregos_antes = qt_empregos)
+
+
+aaa <- aaa |> mutate(diff_firmas = firmas_depois - qt_firmas_antes,
+                     diff_empregos = empregos_depois - qt_empregos_antes)
+```
+
+
+
+# Comparação entre empregos antes e depois: 
+```{r}
+#transforma o nome do dataframe e renomeia colunas:
+df_rj <- aaa 
+
+
+#substitui os valores 0 por NA nas colunas de firmas e de empregos.
+df_rj <- df_rj |> 
+  mutate(across(c(qt_firmas_antes, qt_firmas_antes, firmas_depois, empregos_depois), ~ na_if(.x, 0)))
+
+#visualiza o dataframe  antes e espacialmente
+m1_before <- maplibre_view(df_rj, column = "qt_firmas_antes")
+m2_after <- maplibre_view(df_rj, column = "firmas_depois")
+m1_before_jobs <- maplibre_view(df_rj, column = "qt_empregos_antes")
+m2_after_jobs <- maplibre_view(df_rj, column = "empregos_depois")
+
+# Synchronized side-by-side mode
+#comparação entre empregos
+mapgl::compare(m1_before_jobs, m2_after_jobs, mode = "sync")
+
+```
+
+```{r}
+
+# 1. Valores globais
+valores_globais <- c(df_rj$qt_empregos_antes, df_rj$empregos_depois)
+
+# 2. Quebras por quantis
+quebras <- quantile(valores_globais, probs = c(0, 0.25, 0.50, 0.75, 1), na.rm = TRUE)
+quebras <- unique(quebras)
+
+# 3. Paleta Cividis substituindo o colorRampPalette anterior
+paleta <- cividis(length(quebras))
+cor_na <- "#e0e0e0"
+
+# 4. Mapa ANTES
+m1_before_jobs <- maplibre() |>
+  add_fill_layer(
+    id = "empregos_antes",
+    source = df_rj,
+    fill_color = list(
+      "case",
+      list("==", list("typeof", list("get", "qt_empregos_antes")), "number"),
+      interpolate(
+        column = "qt_empregos_antes",
+        values = quebras,
+        stops = paleta
+      ),
+      cor_na
+    ),
+    fill_opacity = 0.8,
+    tooltip = "qt_empregos_antes",
+    hover_options = list(fill_color = "yellow", fill_opacity = 1)
+  ) |>
+  add_legend(
+    legend_title = "qt_empregos_antes",
+    values = quebras,
+    colors = paleta
+  )
+
+# 5. Mapa DEPOIS
+m2_after_jobs <- maplibre() |>
+  add_fill_layer(
+    id = "empregos_depois",
+    source = df_rj,
+    fill_color = list(
+      "case",
+      list("==", list("typeof", list("get", "empregos_depois")), "number"),
+      interpolate(
+        column = "empregos_depois",
+        values = quebras,
+        stops = paleta
+      ),
+      cor_na
+    ),
+    fill_opacity = 0.8,
+    tooltip = "empregos_depois",
+    hover_options = list(fill_color = "yellow", fill_opacity = 1)
+  ) |>
+  add_legend(
+    legend_title = "empregos_depois",
+    values = quebras,
+    colors = paleta
+  )
+
+# 6. Compara
+mapgl::compare(m1_before_jobs, m2_after_jobs, mode = "sync")
+
+```
+
+```{r}
+# # Para garantir acesso à paleta cividis, se necessário
+# 
+# # 1. Correção do typo e substituição de 0 por NA
+# # 1. Correção do typo e substituição de 0 por NA
+# df_rj <- df_rj |> 
+#   mutate(across(c(qt_firmas_antes, qt_empregos_antes, firmas_depois, empregos_depois), ~ na_if(.x, 0)))
+# 
+# # 2. Função para limitar os outliers (Capping / Winsorization) no percentil 95
+# cap_outliers <- function(x, prob = 0.95) {
+#   limite <- quantile(x, prob, na.rm = TRUE)
+#   ifelse(x > limite, limite, x)
+# }
+# 
+# # 1. Garantir o arredondamento das quebras para a legenda ficar com números inteiros (mais limpa)
+# quebras_legenda <- round(quebras, 0)
+# 
+# # 2. Criar o Mapa 1 (Antes) adicionando a legenda
+# m1_before_jobs <- maplibre() |> 
+#   add_fill_layer(
+#     id = "empregos_antes",
+#     source = df_rj,
+#     fill_color = interpolate(
+#       column = "empregos_antes_cap",
+#       values = quebras,
+#       stops = cores_cividis,
+#       na_color = "lightgrey"
+#     ),
+#     fill_opacity = 0.8,
+#     tooltip = "label_antes", 
+#     popup = "label_antes"    
+#   ) |> 
+#   add_legend(
+#     legend_title = "Nº de Empregos",
+#     values = quebras_legenda,
+#     colors = cores_cividis,
+#     position = "bottom-left" # Mantém a legenda no canto inferior esquerdo para não cobrir o controle de sincronização
+#   )
+# 
+# # 3. Criar o Mapa 2 (Depois) - não precisa de legenda pois a do mapa 1 serve para os dois
+# m2_after_jobs <- maplibre() |> 
+#   add_fill_layer(
+#     id = "empregos_depois",
+#     source = df_rj,
+#     fill_color = interpolate(
+#       column = "empregos_depois_cap",
+#       values = quebras,
+#       stops = cores_cividis,
+#       na_color = "lightgrey"
+#     ),
+#     fill_opacity = 0.8,
+#     tooltip = "label_depois",
+#     popup = "label_depois"
+#   )
+# 
+# # 4. Comparar
+# compare(m1_before_jobs, m2_after_jobs, mode = "sync")
+```
+
+
+# Comparação espacial entre firmas antes e depois
+```{r}
+#mapa de comparação entre firmas antes e deopis
+mapgl::compare(m1_before, m2_after, mode = "sync")
+```
+
+```{r}
+#----------------FIRMAS---------------------------------
+# 1. Valores globais
+valores_globais_firmas <- c(df_rj$qt_firmas_antes, df_rj$firmas_depois)
+
+# 2. Quebras por quantis
+quebras_firmas <- quantile(valores_globais_firmas, probs = c(0, 0.25, 0.50, 0.75, 1), na.rm = TRUE)
+quebras_firmas <- unique(quebras_firmas)
+
+# 3. Paleta Cividis com o numero exato de quebras
+paleta_firmas <- cividis(length(quebras_firmas))
+cor_na <- "#e0e0e0"
+
+# 4. Mapa ANTES
+m1_before_firms <- maplibre() |>
+  add_fill_layer(
+    id = "firmas_antes",
+    source = df_rj,
+    fill_color = list(
+      "case",
+      list("==", list("typeof", list("get", "qt_firmas_antes")), "number"),
+      interpolate(
+        column = "qt_firmas_antes",
+        values = quebras_firmas,
+        stops = paleta_firmas
+      ),
+      cor_na
+    ),
+    fill_opacity = 0.8,
+    tooltip = "qt_firmas_antes",
+    hover_options = list(fill_color = "yellow", fill_opacity = 1)
+  ) |>
+  add_legend(
+    legend_title = "qt_firmas_antes",
+    values = quebras_firmas,
+    colors = paleta_firmas
+  )
+
+# 5. Mapa DEPOIS
+m2_after_firms <- maplibre() |>
+  add_fill_layer(
+    id = "firmas_depois",
+    source = df_rj,
+    fill_color = list(
+      "case",
+      list("==", list("typeof", list("get", "firmas_depois")), "number"),
+      interpolate(
+        column = "firmas_depois",
+        values = quebras_firmas,
+        stops = paleta_firmas
+      ),
+      cor_na
+    ),
+    fill_opacity = 0.8,
+    tooltip = "firmas_depois",
+    hover_options = list(fill_color = "yellow", fill_opacity = 1)
+  ) |>
+  add_legend(
+    legend_title = "firmas_depois",
+    values = quebras_firmas,
+    colors = paleta_firmas
+  )
+
+# 6. Compara
+mapgl::compare(m1_before_firms, m2_after_firms, mode = "sync")
+
+
+
+```
+
+
+
+# Diferença espacial entre a aplicação das censuras sobre firmas e sobre empregos
+```{r}
+
+#visualiza o dataframe  antes e espacialmente
+m1_before <- maplibre_view(df_rj, column = "qt_firmas_antes")
+m2_after <- maplibre_view(df_rj, column = "firmas_depois")
+m1_firmas <- maplibre_view(df_rj, column = "diff_firmas")
+m2_firmas <- maplibre_view(df_rj, column = "diff_empregos")
+
+# Synchronized side-by-side mode
+#mapgl::compare(m1_before, m2_after, mode = "sync")
+#mapa da diferença entre firmas e empregos
+mapgl::compare(m1_firmas, m2_firmas, mode = "sync")
+```
+
+
+```{r}
+# 1. Função para limitar outliers no percentil 95 (Capping)
+cap_outliers <- function(x, prob = 0.95) {
+  limite <- quantile(x, prob, na.rm = TRUE)
+  ifelse(x > limite, limite, x)
+}
+
+# 2. Primeiro aplicamos o capping nas variáveis originais de Antes e Depois
+df_rj <- df_rj |>
+  mutate(
+    firmas_antes_cap   = cap_outliers(qt_firmas_antes, prob = 0.95),
+    firmas_depois_cap  = cap_outliers(firmas_depois, prob = 0.95),
+    empregos_antes_cap = cap_outliers(qt_empregos_antes, prob = 0.95),
+    empregos_depois_cap = cap_outliers(empregos_depois, prob = 0.95)
+  ) |> 
+  # Agora criamos as colunas de diferença: DEPOIS menos ANTES (usando os valores cap)
+  mutate(
+    diff_firmas_cap   = firmas_depois_cap - firmas_antes_cap,
+    diff_empregos_cap =  empregos_depois_cap - empregos_antes_cap
+  )
+
+# ==========================================
+# PREPARAÇÃO PARA O MAPA 1 (DIFERENÇA FIRMAS)
+# ==========================================
+quebras_firmas <- unique(quantile(df_rj$diff_firmas_cap, probs = c(0, 0.25, 0.50, 0.75, 1), na.rm = TRUE))
+quebras_legenda_firmas <- round(quebras_firmas, 0)
+
+# Paleta Cividis base
+cores_base_cividis <- c("#00204d", "#414d6b", "#7c7b78", "#b9a976", "#ffea46")
+paleta_firmas <- colorRampPalette(cores_base_cividis)(length(quebras_firmas))
+
+# ============================================
+# PREPARAÇÃO PARA O MAPA 2 (DIFERENÇA EMPREGOS)
+# ============================================
+quebras_empregos <- unique(quantile(df_rj$diff_empregos_cap, probs = c(0, 0.25, 0.50, 0.75, 1), na.rm = TRUE))
+quebras_legenda_empregos <- round(quebras_empregos, 0)
+
+paleta_empregos <- colorRampPalette(cores_base_cividis)(length(quebras_empregos))
+
+
+# ============================================
+# CONSTRUÇÃO DOS MAPAS
+# ============================================
+cor_na <- "lightgrey"
+
+# 3. Mapa 1 (Diff Firmas) - Legenda à esquerda
+m1_diff_firmas <- maplibre() |> 
+  add_fill_layer(
+    id = "camada_diff_firmas",
+    source = df_rj,
+    fill_color = interpolate(
+      column = "diff_firmas_cap",
+      values = quebras_firmas, 
+      stops = paleta_firmas,
+      na_color = cor_na
+    ),
+    fill_opacity = 0.8,
+    tooltip = "diff_firmas_cap", 
+    popup = "diff_firmas_cap"    
+  ) |> 
+  add_legend(
+    legend_title = "Variação Firmas (Cap)",
+    values = quebras_legenda_firmas,
+    colors = paleta_firmas,
+    position = "bottom-left" 
+  )
+
+# 4. Mapa 2 (Diff Empregos) - Legenda à direita
+m2_diff_empregos <- maplibre() |> 
+  add_fill_layer(
+    id = "camada_diff_empregos",
+    source = df_rj,
+    fill_color = interpolate(
+      column = "diff_empregos_cap", 
+      values = quebras_empregos,
+      stops = paleta_empregos,
+      na_color = cor_na
+    ),
+    fill_opacity = 0.8,
+    tooltip = "diff_empregos_cap",
+    popup = "diff_empregos_cap"
+  ) |> 
+  add_legend(
+    legend_title = "Variação Empregos (Cap)",
+    values = quebras_legenda_empregos,
+    colors = paleta_empregos,
+    position = "bottom-right" 
+  )
+
+# 5. Comparar lado a lado de forma sincronizada
+compare(m1_diff_firmas, m2_diff_empregos, mode = "sync")
+```
+
+
+
+```{r}
+df_rj <- df_rj |> 
+  mutate(
+    empregos_relativo = case_when(
+      # Regra 1: Se o 'antes' ou o 'depois' for NA, o resultado é NA
+      is.na(qt_firmas_antes) | is.na(empregos_depois) ~ NA_real_,
+      
+      # Regra 2: Se o 'antes' for 0, o cálculo daria Infinito. Então colocamos NA.
+      qt_firmas_antes == 0 ~ NA_real_,
+      
+      # Regra 3 (O resto): Se não caiu em nenhuma regra acima, faz a conta normal!
+      TRUE ~ (empregos_depois - qt_firmas_antes) / qt_firmas_antes
+    ),
+    firmas_relativo = case_when(
+      # Regra 1: Se o 'antes' ou o 'depois' for NA, o resultado é NA
+      is.na(qt_firmas_antes) | is.na(firmas_depois) ~ NA_real_,
+      
+      # Regra 2: Se o 'antes' for 0, o cálculo daria Infinito. Então colocamos NA.
+      qt_firmas_antes == 0 ~ NA_real_,
+      
+      # Regra 3 (O resto): Se não caiu em nenhuma regra acima, faz a conta normal!
+      TRUE ~ (firmas_depois - qt_firmas_antes) / qt_firmas_antes
+    ))
+```
+
+
+```{r}
+niveis_faixas <- c("1 - 3", "3 - 10", "10 - 50", "50 - 100", "100+")
+
+tabela_resumo_faixas <- df_rj |> 
+  # 0. CORREÇÃO: Remove a coluna espacial para evitar conflito no pivot_longer
+  st_drop_geometry() |> 
+  
+  # 1. Seleciona as colunas de interesse
+  select(qt_firmas_antes, firmas_depois, qt_firmas_antes, empregos_depois) |> 
+  
+  # 2. Agora o everything() só vai pegar as colunas numéricas selecionadas acima
+  pivot_longer(
+    cols = everything(),
+    names_to = "variavel",
+    values_to = "valor"
+  ) |> 
+  
+  # 3. Cria a classificação em faixas
+  mutate(
+    faixa = case_when(
+      is.na(valor) | valor <= 3 ~ "1 - 3",
+      valor > 3 & valor <= 10   ~ "3 - 10",
+      valor > 10 & valor <= 50  ~ "10 - 50",
+      valor > 50 & valor <= 100 ~ "50 - 100",
+      valor > 100               ~ "100+"
+    ),
+    faixa = factor(faixa, levels = niveis_faixas)
+  ) |> 
+  
+  # 4. Agrupa e conta a quantidade de hexágonos
+  group_by(faixa, variavel) |> 
+  summarise(quantidade = n(), .groups = 'drop') |> 
+  
+  # 5. Espalha de volta
+  pivot_wider(
+    names_from = variavel,
+    values_from = quantidade,
+    values_fill = 0
+  ) |> 
+  
+  # 6. Renomeia e ordena
+  select(
+    `Faixa N. de Firmas/Empregos` = faixa,
+    `Firmas antes` = qt_firmas_antes,
+    `Firmas depois` = firmas_depois,
+    `Empregos antes` = qt_firmas_antes,
+    `Empregos depois` = empregos_depois
+  ) |> 
+  arrange(`Faixa N. de Firmas/Empregos`)
+
+
+```
+
+# Faixa com nº de Empresas/Empregos - resolução 7
+
+```{r}
+knitr::kable(tabela_resumo_faixas, caption = "Tabela Resumo de Firmas e Empregos")
+```
+
+```{r}
+m3_empregos <- maplibre_view(df_rj, column = "empregos_relativo")
+m3_firmas <- maplibre_view(df_rj, column = "firmas_relativo")
+
+
+mapgl::compare(m3_firmas, m3_empregos, mode = "sync")
+                            
+                             
+```
+
+
+
+# Comparação espacial relativa entre o percentual de empregos e firmas movidas após a aplicação da censura.
+
+no pior caso, `r round(max(df_rj$empregos_relativo, na.rm = TRUE), digits = 2)`%  dos empregos foram movidos e `r max(df_rj$firmas_relativo, na.rm = TRUE)`% do numero de firmas foi movido
+
+```{r}
+#estatisticas principais de cada coluna antes e depois: 
+df_rj_reduce <- st_drop_geometry(df_rj)
+  
+
+df_rj_reduce |> 
+  select(qt_firmas_antes, firmas_depois, qt_firmas_antes, empregos_depois) |> 
+    summary()|> 
+   knitr::kable(caption = "Estatísticas Principais")
+```
+
+
+Observa-se pelo summary que o valor mínimo de firmas observado anteriormente era `r round(min(df_rj_reduce$qt_firmas_antes, na.rm = TRUE))` e após aplicar a censura, o valor mínimo passa a ser `r round(min(df_rj_reduce$firmas_depois, na.rm = TRUE))`.
+
+Isso se dá pelo fato da barreira estabelecida ser de pelo menos 3 firmas em cada célula h3. Há de se notar que a função funcionou corretamente sobre a barreira.
+
+Os quartis sofreram alterações importantes, o primeiro quartil contava com um total de `r quantile(df_rj_reduce$qt_firmas_antes, probs = 0.25, na.rm = TRUE)` empregos, e passou a contar com `r quantile(df_rj_reduce$firmas_depois, probs = 0.25, na.rm = TRUE)` empregos.
+
+A média das quantidades de firmas também passou por mudanças significativas, antes a média de firmas por h3 era de `r df_rj_reduce$qt_firmas_antes |>  mean() |> round() ` e passou a ser de `r df_rj_reduce$firmas_depois |>  mean(na.rm =TRUE) |> round() `, uma variação de `r round(((mean(df_rj_reduce$firmas_depois, na.rm = TRUE) - mean(df_rj_reduce$qt_firmas_antes, na.rm = TRUE)) / mean(df_rj_reduce$qt_firmas_antes, na.rm = TRUE)) * 100, 2)`% na média dos valores.
+
+A Mediana que antes estava em `r df_rj_reduce$qt_firmas_antes |>  median() |> round() ` firmas, se encontra agora em `r df_rj_reduce$firmas_depois |>  median(na.rm =TRUE) |> round()` firmas.
+
+o 3º quartil antes possuia  `r quantile(df_rj_reduce$qt_firmas_antes, probs = 0.75, na.rm = TRUE)` firmas e agora possui `r quantile(df_rj_reduce$firmas_depois, probs = 0.75, na.rm = TRUE)` firmas. uma variação de `r round(((quantile(df_rj_reduce$firmas_depois, probs = 0.75, na.rm = TRUE) - quantile(df_rj_reduce$qt_firmas_antes, probs = 0.75, na.rm = TRUE)) / quantile(df_rj_reduce$qt_firmas_antes, probs = 0.75, na.rm = TRUE)) * 100, 2)`%
+
+
+
+```{r}
+# 1. Preparando os dados (transformando de formato "largo" para "longo")
+# Certifique-se de que o pacote sf está carregado
+
+dados_long <- df_rj %>%
+  # Remove a geometria espacial, virando uma tabela normal
+  st_drop_geometry() %>% 
+  # Seleciona as colunas
+  select(qt_firmas_antes, firmas_depois) %>%
+  # Como a geometria sumiu, o everything() vai funcionar perfeitamente
+  pivot_longer(cols = everything(), 
+               names_to = "periodo", 
+               values_to = "quantidade") %>%
+  mutate(periodo = recode(periodo, 
+                          "qt_firmas_antes" = "Antes", 
+                          "firmas_depois" = "Depois"))
+
+
+
+ggplot(dados_long, aes(x = quantidade, fill = periodo)) +
+  geom_histogram(bins = 30, color = "white", show.legend = FALSE) +
+  facet_wrap(~ periodo) + 
+  scale_fill_manual(values = c("Antes" = "#1f77b4", "Depois" = "#ff7f0e")) +
+  scale_x_continuous(limits = c(NA, 4000)) + # <-- Adicionado aqui
+  labs(title = "Diferenca entre Firmas apos censura dos dados",
+       x = "Quantidade de Firmas",
+       y = "Frequencia") +
+  theme_minimal()
+```
+
+
+```{r}
+ggplot(dados_long, aes(x = quantidade, fill = periodo)) +
+  # Substituímos geom_histogram por geom_density
+  geom_area(stat = "bin", bins = 30, alpha = 0.7, color = "white", show.legend = FALSE) +  facet_wrap(~ periodo) + 
+  scale_fill_manual(values = c("Antes" = "#1f77b4", "Depois" = "#ff7f0e")) +
+  scale_x_continuous(limits = c(NA, 4500)) +
+  labs(title = "Diferenca entre Firmas apos censura dos dados - resolucao 7",
+       x = "Quantidade de Firmas",
+       y = "Quantidade de Hexagonos") +
+  theme_minimal()
+#ggsave("diff_firmas_area_res7.png")
+```
+
+
+# revisar este gráfico e texto
+ 
+ Apesar da semelhança entre os histogramas, percebe-se que o ponto de máximo de firmas com 0 empregos antes era de `r df_rj_reduce |> filter(qt_firmas_antes == 0) |> count()` e o ponto de máximo depois foi para `r df_rj_reduce |> filter(is.na(firmas_depois)) |> count()` -> erro de contagem 
+ 
+```{r}
+#verificar se há diferença entre as colunas com maior contagem de valores entre firmas
+df_rj_reduce %>%
+  arrange(desc(qt_firmas_antes)) %>%
+  select(h3_address, qt_firmas_antes, firmas_depois, diff_firmas) %>%
+  head(10)|> 
+  knitr::kable(caption = "Hexagonos com maior contagem de firmas")
+```
+# Não houve alteração entre as células com maior quantidade de empregos.
+```{r}
+#verificar se há diferença entre as colunas com menor contagem de valores entre firmas
+df_rj_reduce %>%
+  arrange(qt_firmas_antes) %>%
+  select(h3_address, qt_firmas_antes, firmas_depois, diff_firmas) %>%
+  head(10)|> 
+  knitr::kable(caption = "Hexagonos com menor contagem de firmas")
+```
+
+
+
+```{r}
+#verificar se há diferença entre as colunas com maior contagem de valores entre empregos firmas
+df_rj_reduce %>%
+  arrange(desc(diff_empregos)) %>%
+  select(h3_address, qt_firmas_antes, empregos_depois, diff_empregos) %>% #"drop" geometry
+  head(10)|> 
+  knitr::kable(caption = "Hexagonos com maior contagem de empregos")
+```
+
+```{r}
+#contagem de hexagonos NA (censurados) pela coluna diff_empregos
+sum(is.na(df_rj_reduce$diff_empregos))
+```
+## `r df_rj_reduce |> filter(diff_firmas > 0) |> count()` hexagonos foram alterados, e `r sum(is.na(df_rj_reduce$diff_firmas)) ` hexagonos foram ocultados.
+destes hexagonos, `r sum(df_rj$qt_firmas_antes, na.rm = TRUE) - sum(df_rj$empregos_depois, na.rm = TRUE)` empregos foram trocados de lugar e `r sum(df_rj$qt_firmas_antes, na.rm = TRUE) - sum(df_rj$firmas_depois, na.rm = TRUE)` firmas foram trocadas.
+
+`r sum(df_rj$diff_empregos, na.rm = TRUE)` empregos foram alteradas e `r sum(df_rj$diff_firmas, na.rm = TRUE)` firmas foram alterados
+
+#percentual relativo de celulas ocultadas
+
+Do total de hexagonos, `r round((sum(is.na(df_rj_reduce$diff_empregos)) / nrow(df_rj_reduce)) * 100, 2)`% precisaram ser ocultadas devido à censura dos dados.
+
+```{r}
+#filtro pelas células que receberam valores (> 0 ou NA)
+df_rj_diff <-  df_rj_reduce |>  
+  filter(diff_empregos != 0 | is.na(diff_empregos) | diff_firmas != 0 | is.na(diff_firmas))
+
+df_rj_diff |> 
+  select(diff_firmas,diff_empregos) |> 
+  summary()|> 
+  knitr::kable(caption = "Diferença entre firmas e empregos")
+```
+
+```{r, include=FALSE}
+
+
+# hist(df_rj_diff$firmas_depois)
+# hist(df_rj_diff$empregos_depois)
+
+```
+ 
+
+```{r, include=FALSE}
+# summary(df_rj_reduce)
+# hist(df_rj_reduce$firmas_depois)
+# hist(df_rj_reduce$empregos_depois)
+
+
+```
+
+```{r}
+#  Une os datasets criando a coluna "origem" de forma segura, sem estragar os originais
+df_combinado_rj <- bind_rows(
+  df_rj_reduce %>% mutate(origem = "Dataset apos censura"),
+  df_rj_diff %>% mutate(origem = "Dataset de dados censurados")
+)
+
+# Gráfico
+ggplot(df_combinado_rj, aes(x = firmas_depois, fill = origem)) +
+  geom_histogram(bins = 30, color = "white", alpha = 0.8) +
+  facet_wrap(~ origem) +  
+  scale_fill_manual(values = c("Dataset apos censura" = "#1b9e77", "Dataset de dados censurados" = "#d95f02")) +
+  scale_x_continuous(limits = c(NA, 4000)) +
+  theme_minimal() +
+  labs(title = "Comparacao de Quantidade de Firmas depois de aplicar a censura",
+       x = "Quantidade de Firmas",
+       y = "Frequencia") +
+  theme(legend.position = "none")
+```
+
+
+
+ Os dados em verde são as contagens de firmas após a aplicação da censura, os dados em amarelo são a quantidade de firmas efetivamente censura
+
+ 
+```{r}
+# Une os datasets criando a coluna "origem" de forma segura, sem estragar os originais
+df_combinado_rj <- bind_rows(
+  df_rj_reduce %>% mutate(origem = "Dataset apos censura empregos"),
+  df_rj_diff %>% mutate(origem = "Dataset de dados censurados empregos")
+)
+
+# O Gráfico
+ggplot(df_combinado_rj, aes(x = empregos_depois, fill = origem)) +
+  geom_histogram(bins = 30, color = "white", alpha = 0.8) +
+  facet_wrap(~ origem) +  
+  scale_fill_manual(values = c("Dataset apos censura empregos" = "#1b9e77", "Dataset de dados censurados empregos" = "#d95f02")) +
+  scale_x_continuous(limits = c(NA, 5000)) +
+  theme_minimal() +
+  labs(title = "Comparacao de Quantidade de Empregos depois de aplicar a censura",
+       x = "Quantidade de Empregos",
+       y = "Frequencia") +
+  theme(legend.position = "none")
+```
+
+
+
+
+ 

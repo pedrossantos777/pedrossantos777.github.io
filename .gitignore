@@ -1,0 +1,12 @@
+.Rproj.user
+.Rhistory
+.RData
+.httr-oauth
+.DS_Store
+.quarto
+# Arquivos e pastas de tiles do MapLibre / PMTiles
+*.pmtiles
+*.pmtiles_*
+dados/tiles/
+dados/parquet/
+dados/*parquet/

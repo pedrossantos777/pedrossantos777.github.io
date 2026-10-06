@@ -1,0 +1,116 @@
+- One or more packages recorded in the lockfile are not installed.
+- Use `]8;;x-r-run:renv::status()renv::status()]8;;` for more details.
+[load] data/rais_test_20260727.parquet | UF=RJ | linhas=34940 | tempo=16.62s
+    ano h3_res
+1  2013      2
+2  2013      3
+3  2013      4
+4  2013      5
+5  2013      6
+6  2013      7
+7  2013      8
+8  2013      9
+9  2023      2
+10 2023      3
+11 2023      4
+12 2023      5
+13 2023      6
+14 2023      7
+15 2023      8
+16 2023      9
+[branch  1/16] ano=2013 res=2 | in=   10 out=   10 | vizinhos=  5.85s censura=    2.69s total=    8.54s
+[branch  2/16] ano=2013 res=3 | in=   18 out=   18 | vizinhos=  0.01s censura=    1.89s total=    1.90s
+[branch  3/16] ano=2013 res=4 | in=   55 out=   55 | vizinhos=  0.02s censura=    2.06s total=    2.08s
+[branch  4/16] ano=2013 res=5 | in=  208 out=  203 | vizinhos=  0.01s censura=    2.76s total=    2.77s
+[branch  5/16] ano=2013 res=6 | in=  691 out=  582 | vizinhos=  0.03s censura=    5.28s total=    5.31s
+[branch  6/16] ano=2013 res=7 | in= 1621 out= 1282 | vizinhos=  0.07s censura=    9.73s total=    9.80s
+[branch  7/16] ano=2013 res=8 | in= 4106 out= 3160 | vizinhos=  0.12s censura=   21.79s total=   21.91s
+[branch  8/16] ano=2013 res=9 | in=10338 out= 6692 | vizinhos=  0.26s censura=   59.83s total=   60.09s
+[branch  9/16] ano=2023 res=2 | in=    9 out=    9 | vizinhos=  0.00s censura=    1.84s total=    1.84s
+[branch 10/16] ano=2023 res=3 | in=   17 out=   17 | vizinhos=  0.01s censura=    1.88s total=    1.89s
+[branch 11/16] ano=2023 res=4 | in=   52 out=   52 | vizinhos=  0.00s censura=    1.96s total=    1.96s
+[branch 12/16] ano=2023 res=5 | in=  204 out=  198 | vizinhos=  0.01s censura=    2.73s total=    2.74s
+[branch 13/16] ano=2023 res=6 | in=  686 out=  593 | vizinhos=  0.03s censura=    5.30s total=    5.33s
+[branch 14/16] ano=2023 res=7 | in= 1646 out= 1345 | vizinhos=  0.05s censura=   10.00s total=   10.05s
+[branch 15/16] ano=2023 res=8 | in= 4311 out= 3367 | vizinhos=  0.13s censura=   25.37s total=   25.50s
+[branch 16/16] ano=2023 res=9 | in=10968 out= 7114 | vizinhos=  0.42s censura=   61.55s total=   61.97s
+
+================ TEMPOS POR BRANCH (RJ, barreira = 5) ================
+      ano h3_res linhas_entrada linhas_saida t_vizinhos_s t_censura_s t_total_s
+    <num>  <int>          <int>        <int>        <num>       <num>     <num>
+ 1:  2013      2             10           10         5.85        2.69      8.54
+ 2:  2013      3             18           18         0.01        1.89      1.90
+ 3:  2013      4             55           55         0.02        2.06      2.08
+ 4:  2013      5            208          203         0.01        2.76      2.77
+ 5:  2013      6            691          582         0.03        5.28      5.31
+ 6:  2013      7           1621         1282         0.07        9.73      9.80
+ 7:  2013      8           4106         3160         0.12       21.79     21.91
+ 8:  2013      9          10338         6692         0.26       59.83     60.09
+ 9:  2023      2              9            9         0.00        1.84      1.84
+10:  2023      3             17           17         0.01        1.88      1.89
+11:  2023      4             52           52         0.00        1.96      1.96
+12:  2023      5            204          198         0.01        2.73      2.74
+13:  2023      6            686          593         0.03        5.30      5.33
+14:  2023      7           1646         1345         0.05       10.00     10.05
+15:  2023      8           4311         3367         0.13       25.37     25.50
+16:  2023      9          10968         7114         0.42       61.55     61.97
+    share_censura
+            <num>
+ 1:     0.3149883
+ 2:     0.9947368
+ 3:     0.9903846
+ 4:     0.9963899
+ 5:     0.9943503
+ 6:     0.9928571
+ 7:     0.9945230
+ 8:     0.9956732
+ 9:     1.0000000
+10:     0.9947090
+11:     1.0000000
+12:     0.9963504
+13:     0.9943715
+14:     0.9950249
+15:     0.9949020
+16:     0.9932225
+
+[TOTAL] anonimizar RJ (16 branches, 34940 linhas) = 229.65s (wall) | soma por etapa: vizinhos=7.02s censura=216.66s
+
+==================== BENCHMARK DAS FUNCOES ====================
+               etapa   ano h3_res linhas     n min_s mediana_s media_s
+              <char> <num>  <int>  <int> <num> <num>     <num>   <num>
+1: encontrar_vizinho  2023      4     52     5  0.00      0.00   0.006
+2:           censura  2023      4     52     5  2.04      2.09   2.088
+3: encontrar_vizinho  2023      6    686     5  0.01      0.02   0.022
+4:           censura  2023      6    686     5  5.31      5.58   5.566
+5: encontrar_vizinho  2023      7   1646     5  0.04      0.05   0.048
+6:           censura  2023      7   1646     5 10.03     10.09  10.102
+7: encontrar_vizinho  2023      8   4311     5  0.11      0.11   0.110
+8:           censura  2023      8   4311     5 22.74     23.83  23.768
+          sd_s max_s
+         <num> <num>
+1: 0.008944272  0.02
+2: 0.039623226  2.14
+3: 0.008366600  0.03
+4: 0.215244048  5.89
+5: 0.004472136  0.05
+6: 0.057619441 10.19
+7: 0.000000000  0.11
+8: 0.864910400 24.88
+
+===================== RESUMO DA EXECUCAO =====================
+                    [,1]                               
+parquet             "data/rais_test_20260727.parquet"  
+uf                  "RJ"                               
+barreira            "5"                                
+linhas_rj_entrada   "34940"                            
+linhas_rj_saida     "24697"                            
+n_branches          "16"                               
+t_load_s            "16.62"                            
+t_total_wall_s      "229.65"                           
+t_soma_vizinhos_s   "7.02"                             
+t_soma_censura_s    "216.66"                           
+share_censura_medio "0.9526552"                        
+R_version           "R version 4.5.2 (2025-10-31 ucrt)"
+data_execucao       "2026-09-01 17:51:41.492872"       
+
+[ok] artefatos salvos em data/otimizacao/

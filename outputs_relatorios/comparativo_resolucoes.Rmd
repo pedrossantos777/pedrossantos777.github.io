@@ -1,0 +1,292 @@
+---
+title: "comparativo_entre_resolucoes"
+author: "pedro santos"
+date: "2026-05-14"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE, warning = FALSE, message = FALSE)
+```
+
+
+```{r cars}
+
+#importa bibliotecas 
+
+library(mapgl)
+library(htmlwidgets)
+library(tidyverse)
+library(ipeadatalake)
+library(geobr)
+library(sf)
+library(mapview)
+library(leafgl)
+library(dplyr)
+library(geoarrow)
+
+#importa funções
+
+source("../R/agregar_escolas.R")
+source("../R/censura_funcao.R")
+source("../R/encontrar_vizinho.R")
+source("../R/escolas_por_h3.R")
+mapview::mapviewOptions(platform = 'leafgl')
+
+#importa dados do rj em diferentes resoluções
+df7 <- arrow::open_dataset("../data/rio_grade_07_rais2019 1.parquet") |> 
+  sf::st_as_sf()
+
+df8 <- arrow::open_dataset("../data/rio_grade_08_rais2019 1.parquet") |> 
+  sf::st_as_sf()
+
+df9 <- arrow::open_dataset("../data/rio_grade_09_rais2019 1.parquet") |> 
+  sf::st_as_sf()
+
+#dataset do rio de janeiro na resolução 7
+df7 <- arrow::open_dataset("../data/rio_grade_07_rais2019 1.parquet") |> 
+  sf::st_as_sf()
+#encontrar os vizinhos de cada h3
+df_vizinhos7 <- encontrar_vizinho(tabela_raw = df7, id_hex = 'h3_address')
+
+#df aplicado aos dados de censura - função retorna colunas de nome "contagem_firmas" e "contagem_empregos"
+df_cens7 <- censura(tabela_raw = df7, tabela_vizinhos = df_vizinhos7, barreira = 3, id_hex = 'h3_address', col_name = 'qt_firmas', col_name2 = "qt_empregos")
+
+
+# summary(df$qt_firmas)
+# summary(df_cens$contagem)
+
+# density(df$qt_firmas) |> plot()
+# density(df_cens$contagem) |> plot()
+
+#df_temporário para testar a aplicação em mapview
+temp7 <- df_cens7 |> sf::st_drop_geometry()
+
+#união entre as tabelas temp (censurada sem feometria e as tabelas do rj)
+aaa7 <- left_join(df7, temp7, by = c('h3_address' = 'id_max_vizinho'))
+
+#criação das colunas com a diferença entre o dataset com firmas censuradas e as firmas anteriores  
+#renomeação das colunas em firmas/empregos antes e depois
+aaa7 <- aaa7 |> 
+    rename(qt_firmas_antes = qt_firmas,
+           qt_empregos_antes = qt_empregos,
+           qt_firmas_depois = contagem_firmas,
+           qt_empregos_depois = contagem_empregos)
+
+
+aaa7 <- aaa7 |> mutate(diff_firmas = qt_firmas_depois - qt_firmas_antes,
+                     diff_empregos = qt_empregos_depois - qt_empregos_antes)
+
+
+
+```
+
+
+# Comparação entre empregos antes e depois - resolução 7: 
+```{r}
+#transforma o nome do dataframe e renomeia colunas:
+df_rj7 <- aaa7 
+
+
+#substitui os valores 0 por NA nas colunas de firmas e de empregos.
+df_rj7 <- df_rj7 |> 
+  mutate(across(c(qt_firmas_antes, qt_empregos_antes, qt_firmas_depois, qt_empregos_depois), ~ na_if(.x, 0)))
+
+#visualiza o dataframe  antes e espacialmente
+m1_before7 <- maplibre_view(df_rj7, column = "qt_firmas_antes")
+m2_after7 <- maplibre_view(df_rj7, column = "qt_firmas_depois")
+m1_before_jobs7 <- maplibre_view(df_rj7, column = "qt_empregos_antes")
+m2_after_jobs7 <- maplibre_view(df_rj7, column = "qt_empregos_depois")
+m1_diff7 <- maplibre_view(df_rj7, column = "diff_empregos")
+
+# Synchronized side-by-side mode
+#comparação entre empregos
+mapgl::compare(m1_before_jobs7, m2_after_jobs7, mode = "sync")
+
+```
+
+
+# Comparação espacial entre firmas antes e depois - 7 
+```{r}
+#mapa de comparação entre firmas antes e deopis
+mapgl::compare(m1_before7, m2_after7, mode = "sync")
+```
+
+
+
+
+resolução 88888888888888888888888888888888
+
+
+
+```{r}
+df_vizinhos8 <- encontrar_vizinho(tabela_raw = df8, id_hex = 'h3_address')
+
+#df aplicado aos dados de censura - função retorna colunas de nome "contagem_firmas" e "contagem_empregos"
+df_cens8 <- censura(tabela_raw = df8, tabela_vizinhos = df_vizinhos8, barreira = 3, id_hex = 'h3_address', col_name = 'qt_firmas', col_name2 = "qt_empregos")
+
+
+# summary(df$qt_firmas)
+# summary(df_cens$contagem)
+
+# density(df$qt_firmas) |> plot()
+# density(df_cens$contagem) |> plot()
+
+#df_temporário para testar a aplicação em mapview
+temp8 <- df_cens8 |> sf::st_drop_geometry()
+
+#união entre as tabelas temp (censurada sem feometria e as tabelas do rj)
+aaa8 <- left_join(df8, temp8, by = c('h3_address' = 'id_max_vizinho'))
+
+#criação das colunas com a diferença entre o dataset com firmas censuradas e as firmas anteriores  
+#renomeação das colunas em firmas/empregos antes e depois
+aaa8 <- aaa8 |> 
+    rename(qt_firmas_antes = qt_firmas,
+           qt_empregos_antes = qt_empregos,
+           qt_firmas_depois = contagem_firmas,
+           qt_empregos_depois = contagem_empregos)
+
+
+aaa8 <- aaa8 |> mutate(diff_firmas = qt_firmas_depois - qt_firmas_antes,
+                     diff_empregos = qt_empregos_depois - qt_empregos_antes)
+
+
+
+```
+
+
+# Comparação entre empregos antes e depois - resolução 8: 
+```{r}
+#transforma o nome do dataframe e renomeia colunas:
+df_rj8 <- aaa8 
+
+
+#substitui os valores 0 por NA nas colunas de firmas e de empregos.
+df_rj8 <- df_rj8 |> 
+  mutate(across(c(qt_firmas_antes, qt_empregos_antes, qt_firmas_depois, qt_empregos_depois), ~ na_if(.x, 0)))
+
+#visualiza o dataframe  antes e espacialmente
+m1_before8 <- maplibre_view(df_rj8, column = "qt_firmas_antes")
+m2_after8 <- maplibre_view(df_rj8, column = "qt_firmas_depois")
+m1_before_jobs8 <- maplibre_view(df_rj8, column = "qt_empregos_antes")
+m2_after_jobs8 <- maplibre_view(df_rj8, column = "qt_empregos_depois")
+m1_diff8 <- maplibre_view(df_rj8, column = "diff_empregos")
+
+# Synchronized side-by-side mode
+#comparação entre empregos
+mapgl::compare(m1_before_jobs8, m2_after_jobs8, mode = "sync")
+
+```
+
+
+# Comparação espacial entre firmas antes e depois - 8
+```{r}
+#mapa de comparação entre firmas antes e deopis
+mapgl::compare(m1_before8, m2_after8, mode = "sync")
+```
+
+
+
+diferença entre res7 e res 8
+
+```{r}
+
+mapgl::compare(m1_before8, m2_after8, mode = "sync")
+
+
+```
+
+
+
+
+resolução 9999999999999999999999999999999
+
+
+```{r}
+df_vizinhos9 <- encontrar_vizinho(tabela_raw = df9, id_hex = 'h3_address')
+
+#df aplicado aos dados de censura - função retorna colunas de nome "contagem_firmas" e "contagem_empregos"
+df_cens9 <- censura(tabela_raw = df9, tabela_vizinhos = df_vizinhos9, barreira = 3, id_hex = 'h3_address', col_name = 'qt_firmas', col_name2 = "qt_empregos")
+
+
+# summary(df$qt_firmas)
+# summary(df_cens$contagem)
+
+# density(df$qt_firmas) |> plot()
+# density(df_cens$contagem) |> plot()
+
+#df_temporário para testar a aplicação em mapview
+temp9 <- df_cens9 |> sf::st_drop_geometry()
+
+#união entre as tabelas temp (censurada sem feometria e as tabelas do rj)
+aaa9 <- left_join(df9, temp9, by = c('h3_address' = 'id_max_vizinho'))
+
+#criação das colunas com a diferença entre o dataset com firmas censuradas e as firmas anteriores  
+#renomeação das colunas em firmas/empregos antes e depois
+aaa9 <- aaa9 |> 
+    rename(qt_firmas_antes = qt_firmas,
+           qt_empregos_antes = qt_empregos,
+           qt_firmas_depois = contagem_firmas,
+           qt_empregos_depois = contagem_empregos)
+
+
+aaa9 <- aaa9 |> mutate(diff_firmas = qt_firmas_depois - qt_firmas_antes,
+                     diff_empregos = qt_empregos_depois - qt_empregos_antes)
+
+
+
+```
+
+
+# Comparação entre empregos antes e depois - resolução 9: 
+```{r}
+#transforma o nome do dataframe e renomeia colunas:
+df_rj9 <- aaa9 
+
+
+#substitui os valores 0 por NA nas colunas de firmas e de empregos.
+df_rj9 <- df_rj9 |> 
+  mutate(across(c(qt_firmas_antes, qt_empregos_antes, qt_firmas_depois, qt_empregos_depois), ~ na_if(.x, 0)))
+
+#visualiza o dataframe  antes e espacialmente
+m1_before9 <- maplibre_view(df_rj9, column = "qt_firmas_antes")
+m2_after9 <- maplibre_view(df_rj9, column = "qt_firmas_depois")
+m1_before_jobs9 <- maplibre_view(df_rj9, column = "qt_empregos_antes")
+m2_after_jobs9 <- maplibre_view(df_rj9, column = "qt_empregos_depois")
+
+# Synchronized side-by-side mode
+#comparação entre empregos
+mapgl::compare(m1_before_jobs9, m2_after_jobs9, mode = "sync")
+
+```
+
+
+# Comparação espacial entre firmas antes e depois - 9
+```{r}
+#mapa de comparação entre firmas antes e deopis
+mapgl::compare(m1_before9, m2_after9, mode = "sync")
+```
+
+
+
+
+# Comparação espacial entre firmas antes  - todas as resoluções
+```{r}
+#mapa de comparação entre firmas antes e deopis
+mapgl::compare(m1_before8, m1_before9, mode = "sync")
+```
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
