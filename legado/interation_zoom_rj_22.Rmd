@@ -1,0 +1,246 @@
+---
+title: "interation_zoom_rj"
+author: "pedro santos"
+date: "2026-07-16"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE, warning = FALSE, message = FALSE)
+
+```
+
+```{r cars}
+library(arrow)
+library(dplyr)
+library(htmlwidgets)
+library(geobr)
+library(sf)
+library(geoarrow)
+library(h3jsr)
+library(freestiler)
+library(sf)
+library(httr)
+library(jsonlite)
+library(mapgl)
+library(mapview)
+library(skimr)
+library(h3jsr)
+library(scales)
+library(DBI)
+library(duckdb)
+library(purrr)
+library(viridisLite)
+library(viridis)
+mapview::mapviewOptions(platform = 'leafgl')
+
+```
+
+
+```{r}
+df <- arrow::open_dataset("../data/rais_h3_2022_6.parquet") %>% 
+  collect()
+```
+
+```{r}
+# Passo 1: Criar a geometria espacial a partir do h3_address e definir o CRS
+
+df <- df |> 
+  group_by(h3_address, year, h3_res) |> 
+  summarise(across(c(F001, T001), ~sum(.x, na.rm = TRUE)))
+
+df_espacial <- df |>
+  as.data.frame() |> # Garante que é um dataframe puro (remove heranças do arrow/group_by)
+  mutate(geometry = cell_to_polygon(h3_address)) |>
+  st_as_sf(crs = 4326) # <- ESSENCIAL: Informa que as coordenadas são Lat/Lon (WGS84)
+
+#summary(df$T001)
+# 2. Quebras por quantis
+quebras_f22 <- quantile(df$F001, probs = seq(0, 1, by = 0.1), na.rm = TRUE)
+quebras_f22 <- unique(quebras_f22)
+quebras_t22 <- quantile(df$T001, probs = seq(0, 1, by = 0.1), na.rm = TRUE)
+quebras_t22 <- unique(quebras_t22)
+```
+
+
+```{r}
+firmas_2022 <- mapview(df_espacial, zcol = "F001", layer.name = "Total (F001) Firmas", at = quebras_f22,
+        col.regions = cividis(5))
+firmas_2022
+
+#firmas_2022 <- mapview(df_espacial, zcol = "F001", layer.name = "Total (F001) Firmas", at = quebras_f,
+ #       col.regions = cividis(5))
+
+```
+
+
+```{r}
+trabalhadores_22 <- mapview(df_espacial, zcol = "T001", layer.name = "Total (T001) Empregos", at = quebras_t22,
+        col.regions = cividis(5))
+trabalhadores_22
+```
+
+
+```{r}
+df |> 
+  ungroup() |> 
+  select(F001, T001) |> 
+  summary() |> 
+  knitr::kable(caption = "Estatisticas Principais - 2022")
+```
+#outliers
+```{r}
+# Detectar outliers usando IQR
+detecta_outliers <- function(x, na.rm = TRUE) {
+  Q1 <- quantile(x, 0.25, na.rm = na.rm)
+  Q3 <- quantile(x, 0.9, na.rm = na.rm)
+  IQR <- Q3 - Q1
+  limite_inf <- Q1 - 1.5 * IQR
+  limite_sup <- Q3 + 1.5 * IQR
+  list(outlier = x < limite_inf | x > limite_sup, 
+       limite_inf = limite_inf, 
+       limite_sup = limite_sup)
+}
+
+# Aplicar detecção
+outliers_f <- detecta_outliers(df$F001)
+df_espacial$eh_outlier <- outliers_f$outlier
+
+# Criar mapa com camadas
+firmas_2022 <- mapview(df_espacial[!df_espacial$eh_outlier,], 
+                        zcol = "F001", 
+                        layer.name = "F001 - Normal", 
+                        at = quebras_f22,
+                        col.regions = cividis(5))
+
+# Adicionar outliers em vermelho com contorno
+firmas_2022 <- firmas_2022 + 
+  mapview(df_espacial[df_espacial$eh_outlier,], 
+          zcol = "F001",
+          layer.name = "F001 - Outliers",
+          col.regions = "red",
+          alpha.regions = 0.7,
+          lwd = 3,
+          legend = FALSE)
+
+firmas_2022
+
+```
+Este mapa apresenta em cor avermelhada os hexágonos outliers da resolução, o mapa foi dividido em decis, e apenas os limites superiores acima dos 9 decis foram considerados como outliers para a visualização.
+
+A ideia principal é de destacar onde existem os focos principais de empregos distribuidos espacialmente aonde o mapa ajustado não conseguiu apresentar. 
+
+É possivel perceber que além de fortes outliers na região central da cidade do Rio de Janeiro, municípios como Volta Redonda, Petrópolis, Teresópolis, Cabo Frio e Campo dos Goytacazes apresentam hexágonos com outliers.
+
+
+
+```{r}
+preparar_hex <- function(caminho_parquet) {
+  read_parquet(caminho_parquet) |>
+    group_by(h3_address, year, h3_res) |>
+    summarise(across(c(F001, T001), ~sum(.x, na.rm = TRUE)), .groups = "drop") |>
+    as.data.frame() |>
+    mutate(geometry = cell_to_polygon(h3_address)) |>
+    st_as_sf(crs = 4326)
+}
+```
+
+```{r}
+hex_res4 <- preparar_hex("../data/rais_h3_2022_4.parquet")
+hex_res6 <- preparar_hex("../data/rais_h3_2022_6.parquet")
+hex_res8 <- preparar_hex("../data/rais_h3_2022_8.parquet")
+
+```
+
+
+```{r liga_servidor, eval=FALSE}
+file.remove("hex.pmtiles") # garante que começa do zero
+
+freestile(
+  list(
+    h3_r04 = hex_res4,
+    h3_r06 = hex_res6,
+    h3_r08 = hex_res8
+  ),
+  "hex.pmtiles"
+)
+
+serve_tiles(".", port = 8080)
+```
+
+
+```{r}
+resolucoes <- list(
+  list(res = 4, min_zoom = 0, max_zoom = 7),
+  list(res = 6, min_zoom = 7, max_zoom = 10),
+  list(res = 8, min_zoom = 10, max_zoom = 14)
+)
+
+
+fill <- interpolate(
+  column = "F001",
+  values = c(0, 25, 50, 100, 200),   # ajuste com quantile(hex_res6$F001, ...)
+  stops = viridisLite::viridis(5)
+)
+
+```
+
+
+```{r}
+# add_hex_layer <- function(map, info) {
+#   add_fill_layer(
+#     map,
+#     id = sprintf("fill-h3-r%02d", info$res),
+#     source = "hex",
+#     source_layer = sprintf("h3_r%02d", info$res),
+#     fill_color = fill,
+#     fill_opacity = 0.85,
+#     fill_outline_color = "rgba(255,255,255,0.3)",
+#     min_zoom = info$min_zoom,
+#     max_zoom = info$max_zoom,
+#     tooltip = "F001: {F001}<br>T001: {T001}"
+#   )
+# }
+# 
+# maplibre(bounds = hex_res6) |>
+#   add_pmtiles_source(id = "hex", url = "http://localhost:8080/hex.pmtiles") |>
+#   reduce(resolucoes, add_hex_layer, .init = _)
+
+```
+
+##Mapa interativo com zoom
+```{r}
+add_hex_layer <- function(map, info) {
+  add_fill_layer(
+    map,
+    id = sprintf("fill-h3-r%02d", info$res),
+    source = "hex",
+    source_layer = sprintf("h3_r%02d", info$res),
+    fill_color = fill,
+    fill_opacity = 0.85,
+    fill_outline_color = "rgba(255,255,255,0.3)",
+    min_zoom = info$min_zoom,
+    max_zoom = info$max_zoom,
+    tooltip = "F001: {F001}<br>T001: {T001}"
+  )
+}
+
+# 1. Crie o mapa base e salve em um objeto
+mapa_base <- maplibre(bounds = hex_res6) |>
+  add_pmtiles_source(id = "hex", url = "http://localhost:8080/hex.pmtiles")
+
+# 2. Aplique o reduce sem usar o pipe com o placeholder "_"
+purrr::reduce(.x = resolucoes, .f = add_hex_layer, .init = mapa_base)
+```
+
+O mapa é agregado por 3 resoluções diferentes, 4, 6 e 8, e sua visualização em diferentes agregações permitem compreender a distribuição espacial de empregos e firmas no Rio de Janeiro.
+
+Na maior agregação (nível 4), é possível perceber que a maioria dos hexagonos são coloridos de amarelo, os quais representam hexagonos com os maiores quartis de empregos. Enquanto que nas extremidades do estado, em áreas de fronteira, se localizam os hexagonos com menor concentração de empregos e firmas. É o caso da fronteira do estado com Juiz de Fora, e nas fronteiras com o estado do Espírito Santo, bem como na fronteira com o litoral norte de São Paulo.
+
+Já na agregação a nível 6 é possível identificar maior granularidade espacial no mapa, a região central da capital do Rio de Janeiro se mantém colorida de amarelo, representando as cores com maior número de empregos, porém outros municípios como Petópolis, Volta Redonda e Nova Friburgo se destacam com hexagonos de cor amarela. Regiões linorâneas como Rio das Ostras, Macaé e Cabo Frio também possuem forte concentração de empregos e firmas.
+
+Quando aumentada a resolução para os hexágonos de nível 6, é possível verificar com maior detalhe as regiões onde os empregos se concentram no estado do Rio de Janeiro, além do centro da cidade do Rio de Janeiro, lugares como a região do aeroporto do Galeão, na Ilha do Governador, bem como em alguns locais na zona norte como Duque de Caxias e Nova Iguaçu possuem forte concentração de firmas em alguns pontos.
+
+As região dos lagos, que antes apresentava maior concentração de hexágonos amarelos, na resolução 6, passa a se concentrar em Cabo Frio e Macaé a maior quantidade de hexágonos amarelos. O mesmo ocorre na região de Volta Redonda, onde os hexágonos com maior quantidade de empregos se concentram na região central do município.
+
+

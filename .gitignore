@@ -1,3 +1,8 @@
+*.parquet
+*.csv
+*.xlsx
+*.pmtiles
+*.pmtiles_*
 .Rproj.user
 .Rhistory
 .RData
@@ -5,8 +10,6 @@
 .DS_Store
 .quarto
 # Arquivos e pastas de tiles do MapLibre / PMTiles
-*.pmtiles
-*.pmtiles_*
 dados/tiles/
 dados/parquet/
 dados/*parquet/
