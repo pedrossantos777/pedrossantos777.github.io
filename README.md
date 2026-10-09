@@ -1,4 +1,4 @@
-# Dashboard RAIS agregada em H3 — Brasil
+# RAIS agregada em H3 — Brasil
 
 Mapa interativo de firmas e vínculos empregatícios da RAIS, agregados
 em grade hexagonal H3. Roda **sem servidor** — depois de publicado,
