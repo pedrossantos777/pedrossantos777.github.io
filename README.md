@@ -63,6 +63,16 @@ hora, sem precisar de um servidor no meio.
 Todos esses arquivos são gerados a partir dos scripts contidos na pasta
 `funcoes_principais`.
 
+# Onde os arquivos são hospedados
+
+- Os arquivos parquet e os tiles são todos armazenados em uma conta no
+`CloudFlare`. Este site permite que gratuitamente sejam utilizados até
+10gb de armazenamento.
+- A partir do armazenamento dos arquivos no `CloudFlare`, é gerada uma
+  espécie de API que é incluída no HTML que é aponta para os arquivos
+  para ser gerado o site.
+
+
 ## Por que separar geometria de atributos
 
 Um hexágono não muda de forma ou de posição de um ano para o outro —
