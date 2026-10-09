@@ -1,0 +1,1000 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8" />
+<title>Firmas e vínculos por hexágono H3 — Brasil</title>
+<meta name="viewport" content="initial-scale=1,maximum-scale=1,user-scalable=no" />
+
+<link href="https://unpkg.com/maplibre-gl@4/dist/maplibre-gl.css" rel="stylesheet" />
+<script src="https://unpkg.com/maplibre-gl@4/dist/maplibre-gl.js"></script>
+<script src="https://unpkg.com/pmtiles@3/dist/pmtiles.js"></script>
+
+<style>
+  html, body { margin: 0; padding: 0; height: 100%; font-family: system-ui, sans-serif; }
+  #map { position: absolute; top: 0; bottom: 0; width: 100%; }
+
+  #controls {
+    position: absolute;
+    top: 12px;
+    left: 12px;
+    z-index: 1;
+    background: white;
+    padding: 10px 14px;
+    border-radius: 6px;
+    box-shadow: 0 1px 4px rgba(0,0,0,0.3);
+    font-size: 14px;
+    max-height: 92vh;
+    overflow-y: auto;
+    width: 280px;
+  }
+  #controls label { display: block; margin-bottom: 4px; margin-top: 10px; font-weight: 600; }
+  #controls label:first-child { margin-top: 0; }
+  #controls select, #controls input[type="text"] { font-size: 14px; padding: 4px; width: 100%; box-sizing: border-box; }
+  #controls .hint { font-size: 11px; color: #888; margin-top: 3px; }
+  #controls hr { border: none; border-top: 1px solid #e5e5e5; margin: 12px 0; }
+  #controls button {
+    margin-top: 6px;
+    width: 100%;
+    padding: 7px;
+    font-size: 13px;
+    font-weight: 600;
+    background: #21908d;
+    color: white;
+    border: none;
+    border-radius: 4px;
+    cursor: pointer;
+  }
+  #controls button:hover { background: #197b78; }
+  #controls button.secundario { background: #666; }
+  #controls button.secundario:hover { background: #444; }
+
+  #opacidade-valor { font-weight: 400; color: #666; }
+
+  #status {
+    font-size: 12px;
+    color: #777;
+    margin-top: 10px;
+    min-height: 16px;
+  }
+  #status.loading { color: #21908d; }
+  #status.erro { color: #c0392b; }
+
+  #legend {
+    position: absolute;
+    bottom: 24px;
+    right: 12px;
+    z-index: 1;
+    background: white;
+    padding: 10px 14px;
+    border-radius: 6px;
+    box-shadow: 0 1px 4px rgba(0,0,0,0.3);
+    font-size: 13px;
+  }
+  #legend .title { font-weight: 600; margin-bottom: 6px; }
+  #legend .ramp {
+    display: flex;
+    width: 220px;
+    height: 16px;
+    border-radius: 2px;
+    overflow: hidden;
+  }
+  #legend .ramp > div { flex: 1; }
+  #legend .labels {
+    display: flex;
+    justify-content: space-between;
+    margin-top: 4px;
+    font-size: 10px;
+    color: #444;
+  }
+  #legend .nota { font-size: 10px; color: #999; margin-top: 6px; }
+
+  .maplibregl-popup-content {
+    font-size: 13px;
+  }
+
+  #toggle-controls {
+    position: absolute;
+    top: 12px;
+    left: 12px;
+    z-index: 2;
+    background: white;
+    border: none;
+    border-radius: 6px;
+    box-shadow: 0 1px 4px rgba(0,0,0,0.3);
+    width: 40px;
+    height: 40px;
+    font-size: 18px;
+    cursor: pointer;
+    display: none; /* só aparece em telas pequenas, via JS */
+    align-items: center;
+    justify-content: center;
+  }
+
+  #controls.collapsed { display: none; }
+
+  @media (max-width: 640px) {
+    #controls { width: min(280px, 85vw); }
+  }
+  #painel-intro { margin-bottom: 12px; padding-bottom: 12px; border-bottom: 1px solid #e5e5e5; }
+  #painel-intro h1 {
+    font-size: 15px;
+    font-weight: 700;
+    margin: 0 0 6px 0;
+    line-height: 1.3;
+  }
+  #painel-intro p {
+    font-size: 12px;
+    color: #666;
+    margin: 0;
+    line-height: 1.45;
+  }
+</style>
+</head>
+<body>
+
+<button id="toggle-controls" aria-label="Mostrar/ocultar painel de controles">☰</button>
+
+<div id="map"></div>
+
+<div id="controls">
+  <div id="painel-intro">
+    <h1>RAIS agregada em H3 - informações sobre vínculos e estabelecimentos</h1>
+    <p>Mapa interativo de dados da RAIS agregados por hexágonos em H3. Escolha uma variável ou fórmula em SQL para visualizar os dados. Filtros são feitos a partir da Região/UF. Os intervalos de classificação podem ser gerados por quantis/Jenks/intervalos iguais. Os dados podem ser exportados em CSV.</p>
+  </div>
+
+  <label for="ano-select">Ano</label>
+  <select id="ano-select"></select>
+
+  <label for="variavel-select">Variável</label>
+  <select id="variavel-select"></select>
+
+  <label for="formula-input">Fórmula SQL personalizada (opcional)</label>
+  <input type="text" id="formula-input" placeholder="ex.: n_firmas / NULLIF(qt_vinc_ativos, 0)" />
+  <div class="hint">Colunas disponíveis: n_firmas, qt_vinc_ativos. Deixe em branco para usar a variável acima.</div>
+  <button id="formula-btn" class="secundario">Aplicar fórmula</button>
+
+  <hr />
+
+  <label for="metodo-select">Método de classificação</label>
+  <select id="metodo-select">
+    <option value="quantis">Quantis</option>
+    <option value="igual">Intervalos iguais</option>
+    <option value="jenks">Natural breaks (Jenks)</option>
+  </select>
+
+  <label for="classes-select">Número de classes</label>
+  <select id="classes-select"></select>
+
+  <label for="paleta-select">Paleta de cores</label>
+  <select id="paleta-select"></select>
+
+  <label for="opacidade-input">Opacidade da camada: <span id="opacidade-valor">85%</span></label>
+  <input type="range" id="opacidade-input" min="0" max="100" value="85" />
+
+  <hr />
+
+  <label for="fundo-select">Fundo do mapa</label>
+  <select id="fundo-select"></select>
+
+  <label for="regiao-select">Região</label>
+  <select id="regiao-select"></select>
+
+  <label for="estado-select">Estado (UF)</label>
+  <select id="estado-select"></select>
+
+  <label for="export-resolucao">Exportar CSV — resolução</label>
+  <select id="export-resolucao"></select>
+  <button id="export-btn">Exportar CSV</button>
+
+  <div id="status"></div>
+</div>
+
+<div id="legend">
+  <div class="title" id="legend-title"></div>
+  <div class="ramp" id="legend-ramp"></div>
+  <div class="labels" id="legend-labels"></div>
+  <div class="nota">Hexágonos sem dado ficam transparentes</div>
+</div>
+
+<script type="module">
+import * as duckdb from "https://cdn.jsdelivr.net/npm/@duckdb/duckdb-wasm@1.29.0/+esm";
+
+console.log("%c[VERSÃO DO ARQUIVO] build-hex-res-cens4-v15", "background: #21908d; color: white; padding: 4px 8px; font-weight: bold; font-size: 14px;");
+
+// ==================================================================
+// CONFIGURAÇÃO
+// ==================================================================
+// Tudo que este dashboard busca no Cloudflare R2 é definido aqui. Se um
+// arquivo for renomeado/substituído no bucket, é só mexer nesta seção —
+// o resto do código nunca referencia nomes de arquivo "soltos".
+//
+// ARQUIVOS REMOTOS USADOS (todos em R2_BASE, raiz do bucket):
+//   1) geometria_targets.pmtiles   → forma dos hexágonos (1 arquivo só,
+//      todas as resoluções e UFs; nunca muda por ano). URL: PMTILES_URL.
+//   2) uf_lookup.parquet           → tabela h3_address → uf, usada só
+//      quando um filtro de Região/UF está ativo. URL: UF_LOOKUP_URL.
+//   3) hex_res4_cens4.parquet,
+//      hex_res6_cens4.parquet,
+//      hex_res8_cens4.parquet      → um arquivo POR RESOLUÇÃO (4/6/8),
+//      cada um com TODOS os anos juntos dentro da coluna "year" e as
+//      colunas de valor "F001" (firmas) e "T001" (vínculos ativos).
+//      O nome de cada um é montado pela função nomeArquivoRemoto(),
+//      logo abaixo de RESOLUCOES. O filtro de ano é feito em SQL
+//      (WHERE year = ...), não trocando de arquivo — ver baseOrigem().
+const R2_BASE = "https://pub-a1447fee74634ed59f47ce2ba90a1fbd.r2.dev";
+const PMTILES_URL = `${R2_BASE}/geometria_targets.pmtiles`; // arquivo (1)
+const DATA_BASE = R2_BASE; // arquivos na raiz do bucket
+const UF_LOOKUP_URL = `${DATA_BASE}/uf_lookup.parquet`; // arquivo (2) — nome remoto
+const UF_LOOKUP_VIRTUAL = "uf_lookup_cens4.parquet"; // nome com que fica registrado dentro do DuckDB (pode ser diferente do nome remoto acima)
+
+// anos disponíveis no seletor "Ano" — PRECISA bater com os anos que
+// realmente existem dentro da coluna "year" dos arquivos hex_resX_cens4.parquet
+// (arquivo 3 acima). Isso aqui só alimenta o <select>; quem filtra de
+// fato é o WHERE year = ... montado em baseOrigem(). Se os arquivos
+// ganharem mais anos, adicione aqui também.
+const ANOS = [2013, 2023];
+const ANO_INICIAL = 2023;
+
+const RESOLUCOES = [
+  { res: 4, minzoom: 0,  maxzoom: 7  },
+  { res: 6, minzoom: 7,  maxzoom: 10 },
+  { res: 8, minzoom: 10, maxzoom: 14 }
+];
+
+const PALETAS = {
+  viridis:        { label: "Viridis",                cores: ["#440154", "#3b528b", "#21908d", "#5dc863", "#fde725"] },
+  cividis:        { label: "Cividis",                 cores: ["#00204d", "#414d6b", "#7c7b78", "#bcaf6f", "#ffea46"] },
+  blues:          { label: "Azul",                    cores: ["#eff3ff", "#bdd7e7", "#6baed6", "#3182bd", "#08519c"] },
+  greens:         { label: "Verde",                   cores: ["#edf8e9", "#bae4b3", "#74c476", "#31a354", "#006d2c"] },
+  amarelo_vermelho: { label: "Amarelo → Vermelho",    cores: ["#ffffb2", "#fecc5c", "#fd8d3c", "#f03b20", "#bd0026"] },
+  rosa_violeta:   { label: "Rosa / Violeta",           cores: ["#feebe2", "#fbb4b9", "#f768a1", "#c51b8a", "#7a0177"] },
+  divergente:     { label: "Divergente (Vermelho↔Azul)", cores: ["#b2182b", "#ef8a62", "#f7f7f7", "#67a9cf", "#2166ac"] }
+};
+const PALETA_INICIAL = "viridis";
+
+// chaves internas (n_firmas/qt_vinc_ativos) continuam as mesmas em todo
+// o app — os parquets novos trazem F001/T001, então o alias é feito na
+// própria consulta SQL (ver baseOrigem()), sem precisar tocar no resto
+// do código (legenda, popup, fórmula, export)
+const VARIAVEIS = {
+  n_firmas: { label: "Quantidade de firmas" },
+  qt_vinc_ativos: { label: "Vínculos ativos (trabalhadores)" }
+};
+const VARIAVEL_INICIAL = "n_firmas";
+
+const CLASSES_MIN = 4, CLASSES_MAX = 8, CLASSES_INICIAL = 5;
+
+const BASEMAPS = {
+  osm: {
+    label: "OpenStreetMap",
+    style: {
+      version: 8,
+      sources: { basemap: { type: "raster", tiles: ["https://tile.openstreetmap.org/{z}/{x}/{y}.png"], tileSize: 256, attribution: "&copy; OpenStreetMap contributors" } },
+      layers: [{ id: "basemap", type: "raster", source: "basemap" }]
+    }
+  },
+  satelite: {
+    label: "Satélite",
+    style: {
+      version: 8,
+      sources: { basemap: { type: "raster", tiles: ["https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}"], tileSize: 256, attribution: "Esri, Maxar, Earthstar Geographics" } },
+      layers: [{ id: "basemap", type: "raster", source: "basemap" }]
+    }
+  },
+  relevo: {
+    label: "Relevo",
+    style: {
+      version: 8,
+      sources: { basemap: { type: "raster", tiles: ["https://tile.opentopomap.org/{z}/{x}/{y}.png"], tileSize: 256, attribution: "&copy; OpenStreetMap contributors, SRTM | Map style: &copy; OpenTopoMap" } },
+      layers: [{ id: "basemap", type: "raster", source: "basemap" }]
+    }
+  }
+};
+const FUNDO_INICIAL = "osm";
+
+const UFS = [
+  { sigla: "AC", nome: "Acre" }, { sigla: "AL", nome: "Alagoas" },
+  { sigla: "AP", nome: "Amapá" }, { sigla: "AM", nome: "Amazonas" },
+  { sigla: "BA", nome: "Bahia" }, { sigla: "CE", nome: "Ceará" },
+  { sigla: "DF", nome: "Distrito Federal" }, { sigla: "ES", nome: "Espírito Santo" },
+  { sigla: "GO", nome: "Goiás" }, { sigla: "MA", nome: "Maranhão" },
+  { sigla: "MT", nome: "Mato Grosso" }, { sigla: "MS", nome: "Mato Grosso do Sul" },
+  { sigla: "MG", nome: "Minas Gerais" }, { sigla: "PA", nome: "Pará" },
+  { sigla: "PB", nome: "Paraíba" }, { sigla: "PR", nome: "Paraná" },
+  { sigla: "PE", nome: "Pernambuco" }, { sigla: "PI", nome: "Piauí" },
+  { sigla: "RJ", nome: "Rio de Janeiro" }, { sigla: "RN", nome: "Rio Grande do Norte" },
+  { sigla: "RS", nome: "Rio Grande do Sul" }, { sigla: "RO", nome: "Rondônia" },
+  { sigla: "RR", nome: "Roraima" }, { sigla: "SC", nome: "Santa Catarina" },
+  { sigla: "SP", nome: "São Paulo" }, { sigla: "SE", nome: "Sergipe" },
+  { sigla: "TO", nome: "Tocantins" }
+];
+
+const REGIOES = {
+  norte:          { label: "Norte",        ufs: ["AC", "AP", "AM", "PA", "RO", "RR", "TO"] },
+  nordeste:       { label: "Nordeste",      ufs: ["AL", "BA", "CE", "MA", "PB", "PE", "PI", "RN", "SE"] },
+  "centro-oeste": { label: "Centro-Oeste",  ufs: ["DF", "GO", "MT", "MS"] },
+  sudeste:        { label: "Sudeste",       ufs: ["ES", "MG", "RJ", "SP"] },
+  sul:            { label: "Sul",           ufs: ["PR", "RS", "SC"] }
+};
+
+// bboxes aproximados [oeste, sul, leste, norte] — usados só para zoom
+// automático; não são limites administrativos precisos
+const UF_BBOX = {
+  AC: [-73.99,-11.14,-66.62,-7.35],   AL: [-38.24,-10.50,-35.15,-8.81],
+  AP: [-54.88,-1.24,-49.87,4.44],     AM: [-73.80,-9.82,-56.09,2.25],
+  BA: [-46.62,-18.35,-37.34,-8.53],   CE: [-41.42,-7.86,-37.25,-2.78],
+  DF: [-48.29,-16.05,-47.31,-15.50],  ES: [-41.88,-21.30,-39.65,-17.89],
+  GO: [-53.25,-19.50,-45.90,-12.39],  MA: [-48.75,-10.26,-41.80,-1.04],
+  MT: [-61.63,-18.04,-50.22,-7.35],   MS: [-58.17,-24.07,-50.92,-17.17],
+  MG: [-51.05,-22.92,-39.86,-14.23],  PA: [-58.90,-9.84,-46.06,2.59],
+  PB: [-38.77,-8.32,-34.79,-6.02],    PR: [-54.62,-26.72,-48.02,-22.51],
+  PE: [-41.36,-9.48,-34.81,-7.29],    PI: [-45.99,-10.93,-40.37,-2.74],
+  RJ: [-44.89,-23.37,-40.96,-20.76],  RN: [-38.58,-6.98,-34.97,-4.83],
+  RS: [-57.65,-33.75,-49.69,-27.08],  RO: [-66.81,-13.69,-59.77,-7.97],
+  RR: [-64.82,-1.55,-58.87,5.27],     SC: [-53.84,-29.35,-48.35,-25.96],
+  SP: [-53.11,-25.31,-44.16,-19.78],  SE: [-38.24,-11.57,-36.39,-9.51],
+  TO: [-50.74,-13.46,-45.70,-5.17]
+};
+const BRASIL_BBOX = [-73.99, -33.75, -34.79, 5.27];
+
+function bboxUniao(bboxes) {
+  return [
+    Math.min(...bboxes.map(b => b[0])), Math.min(...bboxes.map(b => b[1])),
+    Math.max(...bboxes.map(b => b[2])), Math.max(...bboxes.map(b => b[3]))
+  ];
+}
+
+function layerId(res) { return `fill-h3-r${String(res).padStart(2, "0")}`; }
+function sourceLayerId(res) { return `h3_r${String(res).padStart(2, "0")}`; }
+
+// >>> É AQUI que o nome dos arquivos de atributo (item 3 da CONFIGURAÇÃO
+// lá em cima) é montado: hex_res4_cens4.parquet, hex_res6_cens4.parquet,
+// hex_res8_cens4.parquet — um arquivo por resolução, sem ano no nome (os
+// anos vêm todos juntos dentro do parquet, na coluna "year"). Se o nome
+// desses arquivos mudar no bucket, troque só aqui. <<<
+function nomeArquivoRemoto(resolucao) { return `hex_res${resolucao}_cens4.parquet`; }
+function nomeVirtualParquet(resolucao) { return `hex_res${resolucao}_cens4.parquet`; }
+
+function setStatus(msg, tipo) {
+  const el = document.getElementById("status");
+  el.textContent = msg;
+  el.className = tipo || "";
+}
+
+// ==================================================================
+// Cores — amostra N cores de uma rampa de 5 cores-âncora
+// ==================================================================
+function hexToRgb(hex) {
+  const n = parseInt(hex.slice(1), 16);
+  return [(n >> 16) & 255, (n >> 8) & 255, n & 255];
+}
+function rgbToHex([r, g, b]) {
+  return "#" + [r, g, b].map(v => Math.round(v).toString(16).padStart(2, "0")).join("");
+}
+function amostrarRampa(coresBase, n) {
+  const rgbs = coresBase.map(hexToRgb);
+  const resultado = [];
+  for (let i = 0; i < n; i++) {
+    const t = n === 1 ? 0 : i / (n - 1);
+    const pos = t * (rgbs.length - 1);
+    const idx = Math.floor(pos);
+    const frac = pos - idx;
+    const a = rgbs[idx], b = rgbs[Math.min(idx + 1, rgbs.length - 1)];
+    resultado.push(rgbToHex(a.map((v, k) => v + (b[k] - v) * frac)));
+  }
+  return resultado;
+}
+
+// ==================================================================
+// Jenks natural breaks (algoritmo clássico) — amostra até 2000 pontos
+// para manter responsivo em bases grandes
+// ==================================================================
+function jenksBreaks(dadosOrdenados, numClasses) {
+  let amostra = dadosOrdenados;
+  if (amostra.length > 2000) {
+    const passo = Math.ceil(amostra.length / 2000);
+    amostra = amostra.filter((_, i) => i % passo === 0);
+  }
+  const n = amostra.length;
+  if (n <= numClasses) return amostra.slice();
+
+  const mat1 = Array.from({ length: n + 1 }, () => new Array(numClasses + 1).fill(0));
+  const mat2 = Array.from({ length: n + 1 }, () => new Array(numClasses + 1).fill(0));
+  for (let i = 1; i <= numClasses; i++) {
+    mat1[1][i] = 1; mat2[1][i] = 0;
+    for (let j = 2; j <= n; j++) mat2[j][i] = Infinity;
+  }
+  let v = 0;
+  for (let l = 2; l <= n; l++) {
+    let s1 = 0, s2 = 0, w = 0;
+    for (let m = 1; m <= l; m++) {
+      const i3 = l - m + 1;
+      const val = amostra[i3 - 1];
+      s2 += val * val; s1 += val; w++;
+      v = s2 - (s1 * s1) / w;
+      const i4 = i3 - 1;
+      if (i4 !== 0) {
+        for (let j = 2; j <= numClasses; j++) {
+          if (mat2[l][j] >= v + mat2[i4][j - 1]) {
+            mat1[l][j] = i3; mat2[l][j] = v + mat2[i4][j - 1];
+          }
+        }
+      }
+    }
+    mat1[l][1] = 1; mat2[l][1] = v;
+  }
+  const kClass = new Array(numClasses + 1);
+  kClass[numClasses] = amostra[n - 1];
+  kClass[0] = amostra[0];
+  let k = n;
+  for (let j = numClasses; j >= 2; j--) {
+    const id = mat1[k][j] - 2;
+    kClass[j - 1] = amostra[id];
+    k = mat1[k][j] - 1;
+  }
+  return kClass; // n+1 valores: mínimo, quebras internas, máximo
+}
+
+// ==================================================================
+// Estado global
+// ==================================================================
+let anoAtivo = ANO_INICIAL;
+let variavelAtiva = VARIAVEL_INICIAL;
+let expressaoAtiva = VARIAVEL_INICIAL; // coluna ou fórmula SQL customizada
+let paletaAtiva = PALETA_INICIAL;
+let metodoAtivo = "quantis";
+let numClassesAtivo = CLASSES_INICIAL;
+let opacidadeAtiva = 0.85;
+let estadoAtivo = "todos";
+let regiaoAtiva = "todas";
+let requisicaoAtual = 0;
+let breaksPorResolucao = {}; // { 4: [min,...,max], 6: [...], 8: [...] } — cada resolução tem sua própria escala
+
+// filtro de área via subquery de existência (não JOIN) — evita duplicar
+// hexágonos que intersectam mais de uma UF. Retorna fragmentos
+// prefixados com AND (ou string vazia), porque a query base sempre tem
+// um WHERE year = ... fixo (ver baseOrigem())
+function condicaoSQLArea() {
+  if (estadoAtivo !== "todos") {
+    return `AND a.h3_address IN (SELECT h3_address FROM read_parquet('${UF_LOOKUP_VIRTUAL}') WHERE upper(uf) = '${estadoAtivo}')`;
+  }
+  if (regiaoAtiva !== "todas") {
+    const lista = REGIOES[regiaoAtiva].ufs.map(uf => `'${uf}'`).join(",");
+    return `AND a.h3_address IN (SELECT h3_address FROM read_parquet('${UF_LOOKUP_VIRTUAL}') WHERE upper(uf) IN (${lista}))`;
+  }
+  return "";
+}
+
+function buildFillColorExpr(resolucao) {
+  const breaks = breaksPorResolucao[resolucao];
+  if (!breaks) return "#cccccc";
+  const cores = amostrarRampa(PALETAS[paletaAtiva].cores, numClassesAtivo);
+  const internos = breaks.slice(1, -1);
+  const expr = ["step", ["to-number", ["feature-state", "valor"]], cores[0]];
+  internos.forEach((b, i) => { expr.push(b, cores[i + 1]); });
+  return expr;
+}
+
+function buildFillOpacityExpr() {
+  return ["case", ["==", ["feature-state", "valor"], null], 0, opacidadeAtiva];
+}
+
+function repintarCamadas() {
+  RESOLUCOES.forEach(info => {
+    map.setPaintProperty(layerId(info.res), "fill-color", buildFillColorExpr(info.res));
+    map.setPaintProperty(layerId(info.res), "fill-opacity", buildFillOpacityExpr());
+  });
+  atualizarLegenda();
+}
+
+// ==================================================================
+// DuckDB-WASM
+// ==================================================================
+let db, conn;
+
+async function iniciarDuckDB() {
+  setStatus("Carregando motor de consulta…", "loading");
+  const bundle = await duckdb.selectBundle(duckdb.getJsDelivrBundles());
+  const workerUrl = URL.createObjectURL(
+    new Blob([`importScripts("${bundle.mainWorker}");`], { type: "text/javascript" })
+  );
+  db = new duckdb.AsyncDuckDB(new duckdb.ConsoleLogger(), new Worker(workerUrl));
+  await db.instantiate(bundle.mainModule, bundle.pthreadWorker);
+  URL.revokeObjectURL(workerUrl);
+  conn = await db.connect();
+  setStatus("", "");
+}
+
+// baixa o parquet inteiro e registra em memória (evita bug de leitura
+// parcial por HTTP Range do DuckDB-WASM em alguns navegadores/SOs).
+// Agora é UM arquivo por resolução (não mais por resolução x ano), então
+// é buscado/registrado só uma vez e reaproveitado em toda troca de ano —
+// a mesma estratégia de memoização já usada em garantirUfLookup()
+let parquetsRegistrados = {}; // { [resolucao]: Promise<nomeVirtual> }
+
+function garantirParquetResolucao(resolucao) {
+  if (!parquetsRegistrados[resolucao]) {
+    parquetsRegistrados[resolucao] = (async () => {
+      const url = `${DATA_BASE}/${nomeArquivoRemoto(resolucao)}`;
+      const nomeVirtual = nomeVirtualParquet(resolucao);
+      const resp = await fetch(url, { cache: "no-store" });
+      if (!resp.ok) throw new Error(`HTTP ${resp.status} ao buscar ${url}`);
+      const buffer = new Uint8Array(await resp.arrayBuffer());
+      await db.registerFileBuffer(nomeVirtual, buffer);
+      return nomeVirtual;
+    })();
+  }
+  return parquetsRegistrados[resolucao];
+}
+
+let ufLookupPronto = null; // promise — garante que o lookup só é buscado uma vez
+
+function garantirUfLookup() {
+  if (!ufLookupPronto) {
+    ufLookupPronto = (async () => {
+      const resp = await fetch(UF_LOOKUP_URL, { cache: "no-store" });
+      if (!resp.ok) throw new Error(`HTTP ${resp.status} ao buscar uf_lookup.parquet`);
+      const buffer = new Uint8Array(await resp.arrayBuffer());
+      await db.registerFileBuffer(UF_LOOKUP_VIRTUAL, buffer);
+    })();
+  }
+  return ufLookupPronto;
+}
+
+// subquery base: lê o parquet da resolução, filtra pelo ano (coluna
+// "year" no arquivo novo) e já renomeia F001/T001 para os nomes
+// internos usados no resto do app (n_firmas/qt_vinc_ativos) — assim a
+// fórmula customizada e toda a UI continuam funcionando sem mudança
+async function baseOrigem(resolucao, ano) {
+  const nomeVirtual = await garantirParquetResolucao(resolucao);
+  const condicao = condicaoSQLArea();
+  if (condicao) await garantirUfLookup();
+  const origem = `
+    FROM (
+      SELECT h3_address, F001 AS n_firmas, T001 AS qt_vinc_ativos
+      FROM read_parquet('${nomeVirtual}')
+      WHERE year = ${ano}
+    ) a
+    ${condicao}
+  `;
+  return { origem, condicao };
+}
+
+async function aplicarAtributos(resolucao, ano, tokenRequisicao) {
+  const sourceLayer = sourceLayerId(resolucao);
+  const { origem } = await baseOrigem(resolucao, ano);
+
+  if (tokenRequisicao !== requisicaoAtual) return;
+
+  const result = await conn.query(`
+    SELECT a.h3_address, a.n_firmas, a.qt_vinc_ativos, (${expressaoAtiva}) AS valor
+    ${origem}
+  `);
+  if (tokenRequisicao !== requisicaoAtual) return;
+
+  map.removeFeatureState({ source: "hex", sourceLayer });
+  for (const row of result.toArray()) {
+    map.setFeatureState(
+      { source: "hex", sourceLayer, id: row.h3_address },
+      { n_firmas: Number(row.n_firmas), qt_vinc_ativos: Number(row.qt_vinc_ativos), valor: Number(row.valor) }
+    );
+  }
+}
+
+async function calcularBreaks(resolucao, tokenRequisicao) {
+  const { origem, condicao } = await baseOrigem(resolucao, anoAtivo);
+
+  if (metodoAtivo === "quantis") {
+    const probs = Array.from({ length: numClassesAtivo - 1 }, (_, i) => (i + 1) / numClassesAtivo);
+    const r = await conn.query(
+      `SELECT min(${expressaoAtiva}) AS mn, max(${expressaoAtiva}) AS mx, quantile_cont((${expressaoAtiva}), [${probs.join(",")}]) AS qs ${origem}`
+    );
+    if (tokenRequisicao !== requisicaoAtual) return null;
+    const row = r.toArray()[0];
+    const qs = Array.from(row.qs);
+    return [Number(row.mn), ...qs.map(Number), Number(row.mx)];
+  }
+
+  if (metodoAtivo === "igual") {
+    const r = await conn.query(`SELECT min(${expressaoAtiva}) AS mn, max(${expressaoAtiva}) AS mx ${origem}`);
+    if (tokenRequisicao !== requisicaoAtual) return null;
+    const { mn, mx } = r.toArray()[0];
+    const passo = (Number(mx) - Number(mn)) / numClassesAtivo;
+    return Array.from({ length: numClassesAtivo + 1 }, (_, i) => Number(mn) + passo * i);
+  }
+
+  // jenks — precisa dos valores brutos no JS. Reconstrói a origem com
+  // um WHERE (em vez do AND que vem pronto em `condicao`) para filtrar
+  // nulos antes de ordenar
+  const nomeVirtual = await garantirParquetResolucao(resolucao);
+  const origemJenks = `
+    FROM (
+      SELECT h3_address, F001 AS n_firmas, T001 AS qt_vinc_ativos
+      FROM read_parquet('${nomeVirtual}')
+      WHERE year = ${anoAtivo}
+    ) a
+    WHERE (${expressaoAtiva}) IS NOT NULL ${condicao}
+  `;
+  const r = await conn.query(`SELECT (${expressaoAtiva}) AS v ${origemJenks} ORDER BY v`);
+  if (tokenRequisicao !== requisicaoAtual) return null;
+  const valores = r.toArray().map(row => Number(row.v));
+  return jenksBreaks(valores, numClassesAtivo);
+}
+
+// garante sequência estritamente crescente — necessário para a expressão
+// "step" do MapLibre, que rejeita breaks duplicados/iguais. Isso pode
+// acontecer com áreas pequenas (poucos hexágonos, valores repetidos)
+function sanitizarBreaks(breaks) {
+  const resultado = [breaks[0]];
+  for (let i = 1; i < breaks.length; i++) {
+    const anterior = resultado[resultado.length - 1];
+    let atual = breaks[i];
+    if (atual <= anterior) {
+      // nudge mínimo para manter estritamente crescente sem distorcer a escala
+      const epsilon = Math.max(Math.abs(anterior) * 1e-9, 1e-9);
+      atual = anterior + epsilon;
+    }
+    resultado.push(atual);
+  }
+  return resultado;
+}
+
+async function recalcularClassificacao() {
+  const token = requisicaoAtual;
+  setStatus("Calculando classificação…", "loading");
+  try {
+    const resultados = await Promise.all(
+      RESOLUCOES.map(async info => [info.res, await calcularBreaks(info.res, token)])
+    );
+    if (token !== requisicaoAtual) return;
+    resultados.forEach(([res, breaks]) => { if (breaks) breaksPorResolucao[res] = sanitizarBreaks(breaks); });
+    repintarCamadas();
+    setStatus("", "");
+  } catch (err) {
+    setStatus(`Erro na classificação: ${err.message}`, "erro");
+    console.error(err);
+  }
+}
+
+async function carregarAno(ano) {
+  const token = ++requisicaoAtual;
+  setStatus(`Carregando dados de ${ano}…`, "loading");
+  try {
+    await Promise.all(RESOLUCOES.map(info => aplicarAtributos(info.res, ano, token)));
+    if (token !== requisicaoAtual) return;
+    await recalcularClassificacao();
+  } catch (err) {
+    if (token === requisicaoAtual) setStatus(`Erro ao carregar ${ano}: ${err.message}`, "erro");
+    console.error(err);
+  }
+}
+
+// ==================================================================
+// Mapa
+// ==================================================================
+let protocol = new pmtiles.Protocol();
+maplibregl.addProtocol("pmtiles", protocol.tile);
+
+const map = new maplibregl.Map({
+  container: "map",
+  style: BASEMAPS[FUNDO_INICIAL].style,
+  center: [-51, -15],
+  zoom: 4
+});
+
+map.addControl(new maplibregl.NavigationControl(), "top-right");
+
+// exposto no window só para permitir depuração via Console do navegador
+// (script type="module" tem escopo próprio, não vaza pro escopo global)
+window.map = map;
+window.debug = {
+  get conn() { return conn; },
+  get db() { return db; },
+  get estadoAtivo() { return estadoAtivo; },
+  get regiaoAtiva() { return regiaoAtiva; },
+  get anoAtivo() { return anoAtivo; },
+  get expressaoAtiva() { return expressaoAtiva; },
+  get condicaoSQLArea() { return condicaoSQLArea(); },
+  breaksPorResolucao, VARIAVEIS, REGIOES, UF_BBOX
+};
+
+function adicionarCamadasHex() {
+  map.addSource("hex", {
+    type: "vector",
+    url: "pmtiles://" + PMTILES_URL,
+    promoteId: { h3_r04: "h3_address", h3_r06: "h3_address", h3_r08: "h3_address" }
+  });
+
+  RESOLUCOES.forEach(info => {
+    const id = layerId(info.res);
+
+    map.addLayer({
+      id: id,
+      type: "fill",
+      source: "hex",
+      "source-layer": sourceLayerId(info.res),
+      minzoom: info.minzoom,
+      maxzoom: info.maxzoom,
+      paint: {
+        "fill-color": breaksPorResolucao[info.res] ? buildFillColorExpr(info.res) : "#cccccc",
+        "fill-opacity": breaksPorResolucao[info.res] ? buildFillOpacityExpr() : 0.5,
+        "fill-outline-color": "rgba(255,255,255,0.3)"
+      }
+    });
+
+    map.on("click", id, (e) => {
+      const f = e.features[0];
+      const state = map.getFeatureState({ source: "hex", sourceLayer: sourceLayerId(info.res), id: f.id });
+      new maplibregl.Popup()
+        .setLngLat(e.lngLat)
+        .setHTML(
+          `UF: ${f.properties.uf}<br>Firmas: ${state.n_firmas ?? "—"}<br>Vínculos ativos: ${state.qt_vinc_ativos ?? "—"}<br>Valor exibido: ${state.valor ?? "—"}<br>Ano: ${anoAtivo}`
+        )
+        .addTo(map);
+    });
+
+    map.on("mouseenter", id, () => { map.getCanvas().style.cursor = "pointer"; });
+    map.on("mouseleave", id, () => { map.getCanvas().style.cursor = ""; });
+  });
+}
+
+map.on("load", async () => {
+  adicionarCamadasHex();
+  await iniciarDuckDB();
+  await carregarAno(anoAtivo);
+});
+
+// ==================================================================
+// Legenda (discreta — uma cor por classe)
+// ==================================================================
+function formatarNumero(v) {
+  if (Math.abs(v) >= 1000) return (v / 1000).toFixed(Math.abs(v) >= 10000 ? 0 : 1) + "k";
+  if (Number.isInteger(v)) return String(v);
+  return v.toFixed(2);
+}
+
+function resolucaoVisivel() {
+  const z = map.getZoom();
+  const encontrada = RESOLUCOES.find(info => z >= info.minzoom && z < info.maxzoom);
+  return (encontrada || RESOLUCOES[RESOLUCOES.length - 1]).res;
+}
+
+function atualizarLegenda() {
+  const res = resolucaoVisivel();
+  const breaks = breaksPorResolucao[res];
+  if (!breaks) return;
+  const cores = amostrarRampa(PALETAS[paletaAtiva].cores, numClassesAtivo);
+  const varLabel = expressaoAtiva === variavelAtiva ? VARIAVEIS[variavelAtiva].label : "Fórmula personalizada";
+
+  document.getElementById("legend-title").textContent = `${varLabel} (res. H3 ${res})`;
+  document.getElementById("legend-ramp").innerHTML = cores.map(c => `<div style="background:${c}"></div>`).join("");
+  document.getElementById("legend-labels").innerHTML = breaks.map(v => `<span>${formatarNumero(v)}</span>`).join("");
+}
+
+map.on("zoomend", atualizarLegenda);
+
+// ==================================================================
+// Zoom automático por estado/região
+// ==================================================================
+function aplicarZoomEspacial() {
+  if (estadoAtivo !== "todos") {
+    map.fitBounds(UF_BBOX[estadoAtivo], { padding: 30, duration: 800 });
+  } else if (regiaoAtiva !== "todas") {
+    const bbox = bboxUniao(REGIOES[regiaoAtiva].ufs.map(uf => UF_BBOX[uf]));
+    map.fitBounds(bbox, { padding: 30, duration: 800 });
+  } else {
+    map.fitBounds(BRASIL_BBOX, { padding: 20, duration: 800 });
+  }
+}
+
+function aplicarFiltroArea() {
+  aplicarZoomEspacial();
+  carregarAno(anoAtivo); // recarrega feature-state com o novo filtro embutido na query SQL
+}
+
+// ==================================================================
+// Exportar CSV
+// ==================================================================
+async function exportarCSV() {
+  const resolucaoExport = parseInt(document.getElementById("export-resolucao").value, 10);
+  setStatus(`Gerando CSV (resolução ${resolucaoExport})…`, "loading");
+  try {
+    const { origem } = await baseOrigem(resolucaoExport, anoAtivo);
+    const r = await conn.query(`
+      SELECT a.h3_address, a.n_firmas, a.qt_vinc_ativos, (${expressaoAtiva}) AS valor
+      ${origem}
+    `);
+    const linhas = r.toArray();
+    const header = "h3_address,n_firmas,qt_vinc_ativos,valor";
+    const corpo = linhas.map(row => `${row.h3_address},${row.n_firmas},${row.qt_vinc_ativos},${row.valor}`).join("\n");
+    const blob = new Blob([header + "\n" + corpo], { type: "text/csv;charset=utf-8;" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url; a.download = `hex_r0${resolucaoExport}_${anoAtivo}.csv`;
+    document.body.appendChild(a); a.click(); document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+    setStatus("", "");
+  } catch (err) {
+    setStatus(`Erro ao exportar: ${err.message}`, "erro");
+    console.error(err);
+  }
+}
+
+// ==================================================================
+// Seletores
+// ==================================================================
+const selectAno = document.getElementById("ano-select");
+ANOS.forEach(ano => {
+  const opt = document.createElement("option");
+  opt.value = ano; opt.textContent = ano;
+  if (ano === ANO_INICIAL) opt.selected = true;
+  selectAno.appendChild(opt);
+});
+selectAno.addEventListener("change", () => {
+  anoAtivo = parseInt(selectAno.value, 10);
+  carregarAno(anoAtivo);
+});
+
+const selectVariavel = document.getElementById("variavel-select");
+Object.keys(VARIAVEIS).forEach(coluna => {
+  const opt = document.createElement("option");
+  opt.value = coluna; opt.textContent = VARIAVEIS[coluna].label;
+  if (coluna === VARIAVEL_INICIAL) opt.selected = true;
+  selectVariavel.appendChild(opt);
+});
+selectVariavel.addEventListener("change", () => {
+  variavelAtiva = selectVariavel.value;
+  document.getElementById("formula-input").value = "";
+  expressaoAtiva = variavelAtiva;
+  carregarAno(anoAtivo);
+});
+
+document.getElementById("formula-btn").addEventListener("click", () => {
+  const formula = document.getElementById("formula-input").value.trim();
+  expressaoAtiva = formula || variavelAtiva;
+  carregarAno(anoAtivo);
+});
+
+const selectMetodo = document.getElementById("metodo-select");
+selectMetodo.value = metodoAtivo;
+selectMetodo.addEventListener("change", () => {
+  metodoAtivo = selectMetodo.value;
+  recalcularClassificacao();
+});
+
+const selectClasses = document.getElementById("classes-select");
+for (let n = CLASSES_MIN; n <= CLASSES_MAX; n++) {
+  const opt = document.createElement("option");
+  opt.value = n; opt.textContent = n;
+  if (n === CLASSES_INICIAL) opt.selected = true;
+  selectClasses.appendChild(opt);
+}
+selectClasses.addEventListener("change", () => {
+  numClassesAtivo = parseInt(selectClasses.value, 10);
+  recalcularClassificacao();
+});
+
+const selectPaleta = document.getElementById("paleta-select");
+Object.keys(PALETAS).forEach(paleta => {
+  const opt = document.createElement("option");
+  opt.value = paleta; opt.textContent = PALETAS[paleta].label;
+  if (paleta === PALETA_INICIAL) opt.selected = true;
+  selectPaleta.appendChild(opt);
+});
+selectPaleta.addEventListener("change", () => {
+  paletaAtiva = selectPaleta.value;
+  repintarCamadas();
+});
+
+const inputOpacidade = document.getElementById("opacidade-input");
+inputOpacidade.addEventListener("input", () => {
+  opacidadeAtiva = parseInt(inputOpacidade.value, 10) / 100;
+  document.getElementById("opacidade-valor").textContent = `${inputOpacidade.value}%`;
+  RESOLUCOES.forEach(info => map.setPaintProperty(layerId(info.res), "fill-opacity", buildFillOpacityExpr()));
+});
+
+const selectFundo = document.getElementById("fundo-select");
+Object.keys(BASEMAPS).forEach(fundo => {
+  const opt = document.createElement("option");
+  opt.value = fundo; opt.textContent = BASEMAPS[fundo].label;
+  if (fundo === FUNDO_INICIAL) opt.selected = true;
+  selectFundo.appendChild(opt);
+});
+selectFundo.addEventListener("change", async () => {
+  const fundo = selectFundo.value;
+  map.setStyle(BASEMAPS[fundo].style);
+  map.once("styledata", async () => {
+    adicionarCamadasHex();
+    await carregarAno(anoAtivo);
+  });
+});
+
+const selectRegiao = document.getElementById("regiao-select");
+const optTodasRegioes = document.createElement("option");
+optTodasRegioes.value = "todas"; optTodasRegioes.textContent = "Todas as regiões";
+selectRegiao.appendChild(optTodasRegioes);
+Object.keys(REGIOES).forEach(chave => {
+  const opt = document.createElement("option");
+  opt.value = chave; opt.textContent = REGIOES[chave].label;
+  selectRegiao.appendChild(opt);
+});
+selectRegiao.addEventListener("change", () => {
+  regiaoAtiva = selectRegiao.value;
+  if (regiaoAtiva !== "todas" && estadoAtivo !== "todos") {
+    estadoAtivo = "todos";
+    selectEstado.value = "todos";
+  }
+  aplicarFiltroArea();
+});
+
+const selectEstado = document.getElementById("estado-select");
+const optTodosEstados = document.createElement("option");
+optTodosEstados.value = "todos"; optTodosEstados.textContent = "Todos os estados";
+selectEstado.appendChild(optTodosEstados);
+UFS.forEach(({ sigla, nome }) => {
+  const opt = document.createElement("option");
+  opt.value = sigla; opt.textContent = `${nome} (${sigla})`;
+  selectEstado.appendChild(opt);
+});
+selectEstado.addEventListener("change", () => {
+  estadoAtivo = selectEstado.value;
+  if (estadoAtivo !== "todos" && regiaoAtiva !== "todas") {
+    regiaoAtiva = "todas";
+    selectRegiao.value = "todas";
+  }
+  aplicarFiltroArea();
+});
+
+// seletor de resolução de exportação — gerado a partir de RESOLUCOES,
+// então novas resoluções adicionadas ali aparecem aqui automaticamente
+const selectExportResolucao = document.getElementById("export-resolucao");
+RESOLUCOES.forEach(info => {
+  const opt = document.createElement("option");
+  opt.value = info.res;
+  opt.textContent = `Resolução ${info.res}`;
+  selectExportResolucao.appendChild(opt);
+});
+// padrão: resolução do meio da lista (mantém o comportamento anterior de default = 6)
+selectExportResolucao.value = RESOLUCOES[Math.floor(RESOLUCOES.length / 2)].res;
+
+document.getElementById("export-btn").addEventListener("click", exportarCSV);
+
+// ==================================================================
+// Painel recolhível — fechado por padrão em telas pequenas (celular),
+// sempre aberto em telas grandes (desktop)
+// ==================================================================
+const painelControles = document.getElementById("controls");
+const botaoAlternar = document.getElementById("toggle-controls");
+
+function ehTelaPequena() {
+  return window.matchMedia("(max-width: 640px)").matches;
+}
+
+function atualizarIconeBotao() {
+  botaoAlternar.textContent = painelControles.classList.contains("collapsed") ? "☰" : "✕";
+}
+
+let estadoInicialDefinido = false;
+function aplicarLayoutResponsivo() {
+  const pequena = ehTelaPequena();
+  botaoAlternar.style.display = pequena ? "flex" : "none";
+
+  if (!estadoInicialDefinido) {
+    if (pequena) painelControles.classList.add("collapsed"); // começa fechado só no 1º carregamento em mobile
+    estadoInicialDefinido = true;
+  }
+  if (!pequena) painelControles.classList.remove("collapsed"); // desktop sempre mostra o painel
+  atualizarIconeBotao();
+}
+
+botaoAlternar.addEventListener("click", () => {
+  painelControles.classList.toggle("collapsed");
+  atualizarIconeBotao();
+});
+
+window.addEventListener("resize", aplicarLayoutResponsivo);
+aplicarLayoutResponsivo();
+</script>
+
+</body>
+</html>
