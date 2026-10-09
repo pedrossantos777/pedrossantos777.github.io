@@ -5,4 +5,4 @@ O site é alimentado principalmente por 3 arquivos principais: *
 - também nunca se alteram, logo são gerados também apenas uma vez.
 - H3_res4/h3_res6;h3_res8: Estes arquivos em parquet podem ser alterados, pois são os arquivos que contém as informações de cada hexágonos, ou seja, o número de firmas, trabalhadores, setor da economia, etc. Caso
 - seja de interesse do autor o que representar em cada hexágono, esses arquivos devem ser alterados.
-- Todos esses arquivos são gerados a partir dos scripts contidos da pasta "script_principais".
+- Todos esses arquivos são gerados a partir dos scripts contidos da pasta "funcoes_principais".
