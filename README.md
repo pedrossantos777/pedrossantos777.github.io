@@ -4,7 +4,6 @@ Mapa interativo de firmas e vínculos empregatícios da RAIS, agregados
 em grade hexagonal H3. Roda **sem servidor** — depois de publicado,
 tudo acontece dentro do navegador de quem está usando o mapa.
 
-📖 Documentação completa (para quem for mexer no código): [`documentacao-completa.md`](https://github.com/pedrossantos777/pedrossantos777.github.io/blob/main/documentacao-completa.md)
 🖼️ Fluxograma visual do workflow: [`docs/fluxograma-workflow.svg`](docs/fluxograma-workflow.svg)
 
 ---
